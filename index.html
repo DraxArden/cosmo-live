@@ -147,6 +147,22 @@ body.panel-open .credits{display:none}
 .ytinfo b{color:var(--text)}
 .clock{display:inline-block;margin-left:4px;font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--panel2)}
 .clock.day{color:var(--accent)}
+.dsn{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:12.5px;line-height:1.55;color:#c3c9db}
+.dsn.on{border-color:rgba(120,255,170,.45);background:rgba(120,255,170,.06)}
+.dsn.wait{border-color:rgba(255,181,71,.35)}
+.dsn b{color:var(--text)}
+.dsn-note{font-size:11px;color:var(--muted);margin-top:6px}
+.craftbtn{border-color:rgba(95,212,255,.35)!important}
+.chip.mode{border-color:rgba(95,212,255,.45);color:var(--accent2)}
+.dsngrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px}
+.dsncol h4{font-family:var(--head);font-size:13.5px;margin-bottom:8px}
+.dsnrow{display:flex;gap:9px;align-items:flex-start;padding:7px 9px;border-radius:8px;background:var(--panel2);margin-bottom:6px;font-size:12.5px}
+.dsnrow[data-id]{cursor:pointer}.dsnrow[data-id]:hover{outline:1px solid var(--accent)}
+.dsnrow small{color:var(--muted)}
+.dsnrow .led{width:8px;height:8px;border-radius:50%;background:#4a5068;margin-top:5px;flex:none}
+.dsnrow.on .led{background:#6dffa6;box-shadow:0 0 8px #6dffa6}
+.muted{color:var(--muted)}
+@media (max-width:720px){.dsngrid{grid-template-columns:1fr}}
 .err{color:#ff8a96;font-size:12.5px;padding:20px;text-align:center}
 
 .controls,.chips{transition:margin .45s cubic-bezier(.2,.8,.2,1),right .45s cubic-bezier(.2,.8,.2,1)}
@@ -201,6 +217,7 @@ body.panel-open .credits{display:none}
     <div class="p-title" id="ptitle"></div>
     <p class="p-desc" id="pdesc"></p>
     <div class="facts" id="pfacts"></div>
+    <div id="plive"></div>
     <div class="moons" id="pmoons"></div>
     <a class="parent-link" id="pparent"></a>
   </div>
@@ -339,6 +356,7 @@ const $ = s=>document.querySelector(s);
 const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stripHtml = s=>{const d=document.createElement('div');d.innerHTML=s||'';return d.textContent||'';};
 const fmtDate = s=>{try{return new Date(s).toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}catch(e){return ''}};
+const store = { get(k){ try{return localStorage.getItem(k)}catch(e){return null} }, set(k,v){ try{ v==null?localStorage.removeItem(k):localStorage.setItem(k,v) }catch(e){} } };
 const J2000 = Date.UTC(2000,0,1,12);
 const nowDays = ()=> (Date.now()-J2000)/864e5;
 const orbitR = a => 60 + 185*Math.log2(1+a);   // scala logaritmica per far stare tutto
@@ -375,17 +393,352 @@ function pos(b){
     const R = pr*b.a;
     return {x:p.x+R*Math.cos(th), y:p.y-R*Math.sin(th)};
   }
-  const th = (b.L0 + 360/b.P*simDays)*Math.PI/180;
-  const R = orbitR(b.a);
-  return {x:R*Math.cos(th), y:-R*Math.sin(th)};
+  if(b.type) return probeWorld(b) || {x:0,y:0};
+  return h2w(planetXYZ(b.id,simDays));
 }
 
 function focusScale(b){
   const avail = Math.min(W-panelW(), H-panelH()-topH());
+  if(b.type==='sat') return avail*0.3/BY.earth.r;
+  if(b.type==='probe') return b.host ? (b.mode==='L1'||b.mode==='L2' ? avail*0.4/(4.9*BY.earth.r) : b.host==='moon' ? avail*0.1/BY.moon.r : b.mode==='surface' ? avail*0.3/BY[b.host].r : focusScale(BY[b.host])) : overviewScale()*2.2;
   if(b.id==='sun') return avail*0.5/ orbitR(1.6);
   if(b.moons){ let fa=Math.max(...b.moons.map(m=>m.a)); if(W<=720) fa=Math.min(fa,3.4); return avail*0.42/(fa*b.r); }
   if(b.parent) return avail*0.12/b.r;
   return avail*0.16/b.r;
+}
+
+/* =========================================================
+   ORBITE REALI DEI PIANETI (elementi kepleriani JPL, Standish) E SONDE SPAZIALI
+   ========================================================= */
+const DEG=Math.PI/180;
+// a, da, e, de, I, dI, L, dL, ϖ, dϖ, Ω, dΩ  (J2000, variazioni per secolo)
+const KEP={
+ mercury:[0.38709927,0.00000037,0.20563593,0.00001906,7.00497902,-0.00594749,252.25032350,149472.67411175,77.45779628,0.16047689,48.33076593,-0.12534081],
+ venus:[0.72333566,0.00000390,0.00677672,-0.00004107,3.39467605,-0.00078890,181.97909950,58517.81538729,131.60246718,0.00268329,76.67984255,-0.27769418],
+ earth:[1.00000261,0.00000562,0.01671123,-0.00004392,-0.00001531,-0.01294668,100.46457166,35999.37244981,102.93768193,0.32327364,0,0],
+ mars:[1.52371034,0.00001847,0.09339410,0.00007882,1.84969142,-0.00813131,-4.55343205,19140.30268499,-23.94362959,0.44441088,49.55953891,-0.29257343],
+ jupiter:[5.20288700,-0.00011607,0.04838624,-0.00013253,1.30439695,-0.00183714,34.39644051,3034.74612775,14.72847983,0.21252668,100.47390909,0.20469106],
+ saturn:[9.53667594,-0.00125060,0.05386179,-0.00050991,2.48599187,0.00193609,49.95424423,1222.49362201,92.59887831,-0.41897216,113.66242448,-0.28867794],
+ uranus:[19.18916464,-0.00196176,0.04725744,-0.00004397,0.77263783,-0.00242939,313.23810451,428.48202785,170.95427630,0.40805281,74.01692503,0.04240589],
+ neptune:[30.06992276,0.00026291,0.00859048,0.00005105,1.77004347,0.00035372,-55.12002969,218.45945325,44.96476227,-0.32241464,131.78422574,-0.00508664],
+ pluto:[39.48211675,-0.00031596,0.24882730,0.00005170,17.14001206,0.00004818,238.92903833,145.20780515,224.06891629,-0.04062942,110.30393684,-0.01183482]
+};
+function rot3(xp,yp,w,O,I){
+  const cw=Math.cos(w),sw=Math.sin(w),cO=Math.cos(O),sO=Math.sin(O),cI=Math.cos(I),sI=Math.sin(I);
+  return [(cw*cO-sw*sO*cI)*xp+(-sw*cO-cw*sO*cI)*yp, (cw*sO+sw*cO*cI)*xp+(-sw*sO+cw*cO*cI)*yp, (sw*sI)*xp+(cw*sI)*yp];
+}
+function planetXYZ(id,days){ // posizione eliocentrica eclittica in UA; days = giorni dal J2000
+  const el=KEP[id], T=days/36525;
+  const a=el[0]+el[1]*T, e=el[2]+el[3]*T, I=(el[4]+el[5]*T)*DEG, L=el[6]+el[7]*T, wb=el[8]+el[9]*T, O=el[10]+el[11]*T;
+  const M=((((L-wb)%360)+540)%360-180)*DEG; let E=M+e*Math.sin(M);
+  for(let k=0;k<8;k++) E-=(E-e*Math.sin(E)-M)/(1-e*Math.cos(E));
+  return rot3(a*(Math.cos(E)-e), a*Math.sqrt(1-e*e)*Math.sin(E), (wb-O)*DEG, O*DEG, I);
+}
+function h2w(v){ const r=Math.hypot(v[0],v[1]), R=orbitR(r), th=Math.atan2(v[1],v[0]); return {x:R*Math.cos(th), y:-R*Math.sin(th)}; }
+const ORBIT_PATHS={}; let orbitPathsAt=null;
+function buildOrbitPaths(){
+  orbitPathsAt=simDays;
+  for(const id in KEP){
+    const P=BY[id].P, pts=[];
+    for(let i=0;i<=200;i++) pts.push(h2w(planetXYZ(id, simDays + P*i/200)));
+    ORBIT_PATHS[id]=pts;
+  }
+}
+
+/* ---- sonde: elementi osculanti eliocentrici da JPL Horizons, uno ogni 30 giorni ---- */
+const PROBE_EL_TEXT=`voyager1=1314.5 3.704157 8.694972 35.7657 178.8678 338.2627 -15766.2057 1.709424e-1
+voyager2=1314.5 6.278610 21.221223 78.9858 101.8106 130.0217 -14545.4244 1.222722e-1
+newhorizons=1314.5 1.409429 2.307619 2.2586 226.3399 291.6847 -6226.8570 7.365890e-2
+parker=1314.5 0.882025 0.045825 3.3911 76.4822 68.6402 1288.1061 4.071265e+0;1344.5 0.882025 0.045825 3.3911 76.4817 68.6409 1376.5312 4.071259e+0;1374.5 0.882020 0.045825 3.3911 76.4815 68.6417 1376.5313 4.071553e+0;1404.5 0.882026 0.045825 3.3911 76.4813 68.6415 1376.5315 4.071265e+0;1434.5 0.882026 0.045825 3.3911 76.4809 68.6422 1464.9568 4.071262e+0;1464.5 0.882012 0.045825 3.3911 76.4820 68.6418 1464.9590 4.072042e+0;1494.5 0.882028 0.045824 3.3911 76.4818 68.6415 1464.9592 4.071264e+0;1524.5 0.882054 0.045813 3.3911 76.4816 68.6428 1553.3837 4.071384e+0;1554.5 0.882044 0.045812 3.3911 76.4814 68.6434 1553.3844 4.072029e+0;1584.5 0.882054 0.045812 3.3911 76.4812 68.6442 1553.3846 4.071563e+0;1614.5 0.882056 0.045811 3.3911 76.4803 68.6453 1641.8031 4.071577e+0;1644.5 0.882052 0.045811 3.3911 76.4799 68.6455 1641.8033 4.071844e+0;1674.5 0.882055 0.045811 3.3910 76.4794 68.6466 1641.8034 4.071605e+0;1704.5 0.882052 0.045812 3.3910 76.4788 68.6475 1730.2211 4.071604e+0;1734.5 0.882049 0.045812 3.3910 76.4786 68.6473 1730.2212 4.071765e+0;1764.5 0.882048 0.045814 3.3910 76.4784 68.6483 1730.2213 4.071581e+0;1794.5 0.882047 0.045815 3.3910 76.4784 68.6486 1818.6395 4.071588e+0;1824.5 0.882044 0.045815 3.3910 76.4782 68.6484 1818.6396 4.071709e+0;1854.5 0.882046 0.045815 3.3910 76.4780 68.6491 1818.6398 4.071590e+0;1884.5 0.882044 0.045816 3.3910 76.4778 68.6495 1907.0578 4.071600e+0;1914.5 0.882041 0.045816 3.3910 76.4777 68.6493 1907.0580 4.071707e+0;1944.5 0.882043 0.045816 3.3910 76.4776 68.6497 1907.0581 4.071638e+0;1974.5 0.882052 0.045811 3.3910 76.4771 68.6509 1995.4747 4.071709e+0;2004.5 0.882051 0.045811 3.3910 76.4769 68.6511 1995.4748 4.071864e+0;2034.5 0.882050 0.045812 3.3910 76.4761 68.6523 1995.4750 4.071792e+0;2064.5 0.882048 0.045812 3.3909 76.4754 68.6533 2083.8885 4.071808e+0
+clipper=1314.5 0.475435 0.838859 2.0465 71.4330 302.3988 1337.0771 4.873814e-1;1344.5 0.475493 0.838859 2.0465 71.4332 302.3986 1337.0770 4.873003e-1;1374.5 0.475899 0.838796 2.0477 71.4272 302.4023 1337.0817 4.867909e-1;1404.5 0.710152 0.937635 2.9505 71.3538 331.8452 1357.8655 1.693984e-1;1434.5 0.710174 0.937642 2.9499 71.3523 331.8466 1357.8652 1.693769e-1;1464.5 0.710195 0.937643 2.9499 71.3507 331.8492 1357.8669 1.693581e-1;1494.5 0.710224 0.937622 2.9499 71.3483 331.8517 1357.8698 1.693389e-1;1524.5 0.710260 0.937574 2.9498 71.3447 331.8544 1357.8750 1.693205e-1;1554.5 0.710300 0.937496 2.9498 71.3395 331.8577 1357.8828 1.693058e-1;1584.5 0.710347 0.937377 2.9499 71.3328 331.8612 1357.8938 1.692966e-1;1614.5 0.710401 0.937215 2.9499 71.3243 331.8650 1357.9085 1.692932e-1;1644.5 0.710463 0.937003 2.9501 71.3140 331.8690 1357.9271 1.692972e-1;1674.5 0.710536 0.936726 2.9503 71.3022 331.8727 1357.9511 1.693078e-1;1704.5 0.710623 0.936390 2.9506 71.2891 331.8765 1357.9818 1.693227e-1;1734.5 0.710722 0.936000 2.9509 71.2745 331.8808 1358.0187 1.693416e-1;1764.5 0.710833 0.935557 2.9513 71.2589 331.8853 1358.0629 1.693639e-1;1794.5 0.710956 0.935069 2.9518 71.2422 331.8905 1358.1135 1.693889e-1;1824.5 0.711088 0.934533 2.9524 71.2240 331.8964 1358.1692 1.694180e-1;1854.5 0.711236 0.933930 2.9531 71.2047 331.9025 1358.2322 1.694519e-1;1884.5 0.711403 0.933250 2.9538 71.1839 331.9090 1358.3044 1.694903e-1;1914.5 0.711592 0.932482 2.9547 71.1614 331.9162 1358.3876 1.695333e-1;1944.5 0.711807 0.931613 2.9558 71.1374 331.9240 1358.4865 1.695803e-1;1974.5 0.712047 0.930656 2.9569 71.1117 331.9333 1358.6023 1.696298e-1;2004.5 0.712310 0.929614 2.9583 71.0839 331.9445 1358.7337 1.696823e-1;2034.5 0.712599 0.928477 2.9598 71.0542 331.9574 1358.8828 1.697382e-1;2064.5 0.712915 0.927237 2.9615 71.0221 331.9725 1359.0498 1.697980e-1
+juice=1314.5 0.479745 0.849564 0.0041 176.2016 246.7251 1354.4422 4.723183e-1;1344.5 0.479005 0.849660 0.0043 177.6090 245.3237 1354.4585 4.732458e-1;1374.5 0.478924 0.849663 0.0043 179.0051 243.9328 1354.4617 4.733539e-1;1404.5 0.478908 0.849671 0.0044 177.7103 245.2294 1354.4626 4.733686e-1;1434.5 0.478910 0.849665 0.0044 177.4146 245.5243 1354.4623 4.733714e-1;1464.5 0.478913 0.849640 0.0044 177.3502 245.5858 1354.4613 4.733879e-1;1494.5 0.478920 0.849601 0.0045 177.3618 245.5702 1354.4604 4.734113e-1;1524.5 0.478932 0.849556 0.0045 177.4946 245.4339 1354.4605 4.734317e-1;1554.5 0.478946 0.849514 0.0046 177.6738 245.2518 1354.4612 4.734481e-1;1584.5 0.478958 0.849478 0.0046 177.8955 245.0279 1354.4619 4.734617e-1;1614.5 0.478968 0.849451 0.0046 178.0613 244.8605 1354.4621 4.734713e-1;1644.5 0.478972 0.849437 0.0046 178.0065 244.9140 1354.4605 4.734774e-1;1674.5 0.478976 0.849424 0.0046 177.9882 244.9309 1354.4578 4.734828e-1;1704.5 0.478981 0.849410 0.0046 178.0666 244.8513 1354.4550 4.734872e-1;1734.5 0.478980 0.849411 0.0045 175.7100 247.2069 1354.4505 4.734876e-1;1764.5 0.478984 0.849404 0.0045 175.9391 246.9772 2114.7613 4.734887e-1;1794.5 0.478984 0.849405 0.0045 176.1509 246.7650 2114.7596 4.734881e-1;1824.5 0.478976 0.849423 0.0045 176.0384 246.8768 2114.7607 4.734832e-1;1854.5 0.478965 0.849450 0.0045 175.8617 247.0524 2114.7620 4.734755e-1;1884.5 0.478954 0.849479 0.0045 175.6067 247.3058 2114.7628 4.734657e-1;1914.5 0.478945 0.849510 0.0045 175.2803 247.6302 2114.7629 4.734532e-1;1944.5 0.478942 0.849530 0.0045 175.1814 247.7269 2114.7617 4.734406e-1;1974.5 0.478944 0.849540 0.0045 175.1492 247.7575 2114.7602 4.734291e-1;2004.5 0.478947 0.849551 0.0045 175.0739 247.8310 2114.7588 4.734156e-1;2034.5 0.478950 0.849562 0.0045 175.0421 247.8612 2114.7579 4.734031e-1;2064.5 0.478951 0.849569 0.0045 175.0205 247.8815 2114.7572 4.733951e-1
+lucy=1314.5 0.713422 0.961247 4.4202 261.2327 160.4163 642.9864 1.604412e-1;1344.5 0.713403 0.961323 4.4202 261.2331 160.4170 642.9763 1.604377e-1;1374.5 0.713377 0.961432 4.4200 261.2342 160.4174 642.9614 1.604330e-1;1404.5 0.713345 0.961557 4.4199 261.2358 160.4170 642.9397 1.604282e-1;1434.5 0.713312 0.961684 4.4197 261.2376 160.4162 642.9131 1.604241e-1;1464.5 0.713279 0.961809 4.4194 261.2396 160.4147 642.8821 1.604205e-1;1494.5 0.713252 0.961908 4.4192 261.2411 160.4133 642.8510 1.604182e-1;1524.5 0.725466 0.907947 5.0677 257.0808 163.2949 638.0974 1.638729e-1;1554.5 0.725445 0.908024 5.0675 257.0817 163.2939 638.0713 1.638707e-1;1584.5 0.725425 0.908101 5.0673 257.0824 163.2930 638.0443 1.638684e-1;1614.5 0.725402 0.908184 5.0671 257.0833 163.2919 638.0154 1.638657e-1;1644.5 0.725376 0.908283 5.0669 257.0842 163.2907 637.9790 1.638624e-1;1674.5 0.725354 0.908367 5.0667 257.0852 163.2890 637.9392 1.638598e-1;1704.5 0.729816 0.891797 4.5127 259.5224 161.1202 648.7026 1.643593e-1;1734.5 0.729800 0.891857 4.5125 259.5231 161.1187 648.6667 1.643572e-1;1764.5 0.729787 0.891909 4.5124 259.5235 161.1175 2839.0107 1.643552e-1;1794.5 0.729771 0.891967 4.5123 259.5239 161.1165 2839.0091 1.643529e-1;1824.5 0.729750 0.892050 4.5121 259.5246 161.1149 2839.0118 1.643495e-1;1854.5 0.729728 0.892138 4.5119 259.5254 161.1129 2839.0102 1.643456e-1;1884.5 0.729708 0.892219 4.5117 259.5261 161.1107 2839.0028 1.643416e-1;1914.5 0.729691 0.892287 4.5115 259.5268 161.1084 2838.9880 1.643375e-1;1944.5 0.729685 0.892320 4.5114 259.5270 161.1064 2838.9652 1.643344e-1;1974.5 0.726163 0.907034 2.2870 270.4690 149.8969 2838.2928 1.634961e-1;2004.5 0.726165 0.907034 2.2870 270.4690 149.8957 2838.2725 1.634942e-1;2034.5 0.726168 0.907031 2.2870 270.4688 149.8949 2838.2552 1.634924e-1;2064.5 0.726168 0.907038 2.2870 270.4688 149.8939 2838.2427 1.634902e-1
+psyche=1314.5 0.331996 1.390030 2.6258 159.9672 222.2170 1196.8780 3.283494e-1;1344.5 0.333516 1.406281 2.6588 158.7416 225.8203 1199.8991 3.215741e-1;1374.5 0.333793 1.419601 2.6947 157.9764 228.2553 1201.9247 3.168605e-1;1404.5 0.332784 1.448734 2.7654 157.0038 232.4614 1205.6746 3.080498e-1;1434.5 0.332372 1.456104 2.7830 156.8201 233.4174 1206.5581 3.059967e-1;1464.5 0.332415 1.456047 2.7832 156.8193 233.4200 1206.5729 3.059856e-1;1494.5 0.322151 1.580189 3.0487 155.1511 246.7764 1219.6286 2.769111e-1;1524.5 0.315059 1.623856 3.1075 155.2129 249.8728 1222.3039 2.699995e-1;1554.5 0.306674 1.668023 3.1477 155.3432 252.5404 1223.9885 2.641234e-1;1584.5 0.298492 1.706164 3.1669 155.4457 254.5023 1224.3941 2.598497e-1;1614.5 0.288243 1.750145 3.1746 155.5015 256.4588 1223.6423 2.556179e-1;1644.5 0.277702 1.792898 3.1711 155.4655 258.1076 1221.6590 2.520258e-1;1674.5 0.267118 1.834336 3.1607 155.3352 259.4856 1218.4749 2.489068e-1;1704.5 0.256622 1.874671 3.1466 155.1207 260.6256 1214.1197 2.461109e-1;1734.5 0.246267 1.914248 3.1313 154.8381 261.5481 1208.5902 2.435194e-1;1764.5 0.237548 1.947673 3.1185 154.5525 262.1529 1202.8109 2.414066e-1;1794.5 0.227538 1.986478 3.1050 154.1854 262.6473 1194.8067 2.389977e-1;1824.5 0.217646 2.025541 3.0935 153.7968 262.9152 1185.3501 2.365908e-1;1854.5 0.207866 2.065082 3.0841 153.3987 262.9294 1174.2350 2.341510e-1;1884.5 0.198205 2.105291 3.0769 153.0004 262.6538 1161.1897 2.316491e-1;1914.5 0.188688 2.146307 3.0720 152.6094 262.0406 1145.8604 2.290595e-1;1944.5 0.180632 2.182457 3.0695 152.2829 261.1757 2718.1332 2.267272e-1;1974.5 0.171504 2.225503 3.0684 151.9195 259.7116 2717.0815 2.238707e-1;2004.5 0.162782 2.269378 3.0691 151.5773 257.6920 2713.7794 2.208522e-1;2034.5 0.154667 2.313813 3.0714 151.2590 255.0200 2707.7220 2.176474e-1;2064.5 0.148615 2.350899 3.0743 151.0154 252.1999 2700.0638 2.148039e-1
+solarorbiter=1314.5 0.507312 0.294163 12.6178 322.3468 306.3933 1271.6714 2.136388e+0;1344.5 0.507312 0.294163 12.6178 322.3460 306.3943 1271.6715 2.136383e+0;1374.5 0.507314 0.294162 12.6181 322.3447 306.3957 1440.1806 2.136388e+0;1404.5 0.491268 0.280826 19.2936 317.8581 319.8129 1443.4081 2.403153e+0;1434.5 0.491231 0.280836 19.2915 317.8575 319.8155 1443.4098 2.403288e+0;1464.5 0.491238 0.280835 19.2915 317.8574 319.8139 1443.4097 2.403258e+0;1494.5 0.491243 0.280834 19.2915 317.8571 319.8148 1443.4101 2.403232e+0;1524.5 0.491239 0.280837 19.2915 317.8571 319.8158 1593.2099 2.403214e+0;1554.5 0.491230 0.280843 19.2915 317.8570 319.8165 1593.2110 2.403213e+0;1584.5 0.491219 0.280845 19.2914 317.8570 319.8170 1593.2113 2.403263e+0;1614.5 0.491225 0.280843 19.2914 317.8569 319.8156 1593.2112 2.403237e+0;1644.5 0.491230 0.280841 19.2914 317.8568 319.8158 1593.2114 2.403230e+0;1674.5 0.491229 0.280842 19.2914 317.8568 319.8165 1743.0108 2.403222e+0;1704.5 0.491222 0.280846 19.2913 317.8568 319.8170 1743.0116 2.403224e+0;1734.5 0.491211 0.280848 19.2913 317.8566 319.8176 1743.0119 2.403276e+0;1764.5 0.491218 0.280846 19.2912 317.8565 319.8162 1743.0118 2.403254e+0;1794.5 0.491223 0.280843 19.2913 317.8561 319.8163 1743.0120 2.403255e+0;1824.5 0.491227 0.280840 19.2915 317.8554 319.8170 1892.8085 2.403264e+0;1854.5 0.406285 0.327744 25.3426 315.7888 325.5308 1899.7301 2.403084e+0;1884.5 0.406259 0.327752 25.3400 315.7876 325.5337 1899.7316 2.403149e+0;1914.5 0.406259 0.327752 25.3400 315.7874 325.5325 1899.7315 2.403153e+0;1944.5 0.406258 0.327747 25.3400 315.7873 325.5309 1899.7314 2.403214e+0;1974.5 0.406258 0.327748 25.3401 315.7872 325.5319 1899.7320 2.403202e+0;2004.5 0.406252 0.327752 25.3400 315.7872 325.5325 2049.5331 2.403196e+0;2034.5 0.406241 0.327756 25.3399 315.7871 325.5328 2049.5335 2.403220e+0;2064.5 0.406240 0.327756 25.3399 315.7870 325.5313 2049.5333 2.403225e+0
+hera=1314.5 0.396110 1.022793 3.3826 72.0392 317.9109 1409.6549 4.471565e-1;1344.5 0.383094 1.013414 3.4139 72.9933 319.5682 1412.2772 4.681142e-1;1374.5 0.383089 1.013410 3.4137 72.9876 319.5749 1412.2780 4.681231e-1;1404.5 0.383081 1.013410 3.4137 72.9863 319.5764 1412.2783 4.681320e-1;1434.5 0.383108 1.013414 3.4138 72.9852 319.5753 1412.2757 4.680982e-1`;
+const PROBE_EL={};
+PROBE_EL_TEXT.trim().split('\n').forEach(l=>{ const [k,v]=l.split('='); PROBE_EL[k]=v.split(';').map(r=>r.split(' ').map(Number)); });
+const EL_FIRST=1314.5, EL_LAST=2064.5; // giorni da JD 2460000: 1 ott 2026 → 17 nov 2028
+function keplerXYZ(E,t){ // E=[epoca,e,q,i,Ω,ω,Tp,n(°/g)], t in giorni da JD 2460000
+  const [,e,q,i,Om,w,Tp,n]=E, M=n*(t-Tp)*DEG; let nu,r;
+  if(e<1){ const a=q/(1-e); let Ea=M; for(let k=0;k<30;k++) Ea-=(Ea-e*Math.sin(Ea)-M)/(1-e*Math.cos(Ea));
+    nu=2*Math.atan2(Math.sqrt(1+e)*Math.sin(Ea/2),Math.sqrt(1-e)*Math.cos(Ea/2)); r=a*(1-e*Math.cos(Ea)); }
+  else { const a=q/(e-1); let H=Math.asinh(M/e); for(let k=0;k<50;k++) H-=(e*Math.sinh(H)-H-M)/(e*Math.cosh(H)-1);
+    nu=2*Math.atan2(Math.sqrt(e+1)*Math.sinh(H/2),Math.sqrt(e-1)*Math.cosh(H/2)); r=a*(e*Math.cosh(H)-1); }
+  const u=w*DEG+nu, O=Om*DEG, I=i*DEG;
+  return [r*(Math.cos(O)*Math.cos(u)-Math.sin(O)*Math.sin(u)*Math.cos(I)), r*(Math.sin(O)*Math.cos(u)+Math.cos(O)*Math.sin(u)*Math.cos(I)), r*Math.sin(u)*Math.sin(I)];
+}
+const tJ = days => days + 2451545 - 2460000; // giorni dal J2000 → giorni da JD 2460000
+function probeXYZ(p,days){
+  const els=PROBE_EL[p.id]; if(!els) return null; const t=tJ(days);
+  if(!p.forever && (t<EL_FIRST-60 || t>EL_LAST+400)) return null;
+  let E=els[0]; for(const x of els) if(x[0]<=t) E=x;
+  return keplerXYZ(E,t);
+}
+const AU_KM=149597870.7;
+const PROBES=[
+ {id:'voyager1',name:'Voyager 1',naif:31,agency:'NASA',launch:'5 settembre 1977',forever:true,c:'#ffd27a',q:'Voyager 1 spacecraft',n:'Voyager',
+  d:"L'oggetto costruito dall'uomo più lontano di sempre. Dopo aver visitato Giove e Saturno, dal 2012 viaggia nello spazio interstellare, oltre la bolla di vento solare che avvolge il Sistema Solare."},
+ {id:'voyager2',name:'Voyager 2',naif:32,agency:'NASA',launch:'20 agosto 1977',forever:true,c:'#ffd27a',q:'Voyager 2 spacecraft',n:'Voyager',
+  d:"L'unica sonda ad aver visitato Urano e Nettuno. È entrata nello spazio interstellare nel 2018 e, come la gemella, porta a bordo il Disco d'oro con suoni e immagini della Terra."},
+ {id:'newhorizons',name:'New Horizons',naif:98,agency:'NASA',launch:'19 gennaio 2006',forever:true,c:'#9fd8ff',q:'New Horizons',n:'New Horizons',
+  d:"Ha fotografato Plutone da vicino nel 2015 e l'oggetto Arrokoth nel 2019. Oggi esplora la Fascia di Kuiper, ai confini del Sistema Solare."},
+ {id:'parker',name:'Parker Solar Probe',naif:96,agency:'NASA',launch:'12 agosto 2018',forever:true,c:'#ff9a5a',q:'Parker Solar Probe',n:'Parker Solar Probe',
+  d:"La sonda che \"tocca\" il Sole: attraversa la corona solare a circa 6 milioni di km dalla superficie ed è l'oggetto più veloce mai costruito, quasi 700.000 km/h al perielio."},
+ {id:'solarorbiter',name:'Solar Orbiter',naif:144,agency:'ESA / NASA',launch:'10 febbraio 2020',c:'#ffb36b',q:'Solar Orbiter',n:'Solar Orbiter',
+  d:"Studia il Sole da vicino e, grazie ai passaggi ravvicinati a Venere che inclinano sempre più la sua orbita, osserva per la prima volta i poli solari."},
+ {id:'clipper',name:'Europa Clipper',naif:159,agency:'NASA',launch:'14 ottobre 2024',c:'#8fe3ff',q:'Europa Clipper',n:'Europa Clipper',
+  d:"Diretta verso Giove, dove arriverà nel 2030 per studiare Europa e il suo oceano sotterraneo. Lungo il viaggio usa la gravità di Marte e della Terra per accelerare."},
+ {id:'juice',name:'JUICE',naif:28,agency:'ESA',launch:'14 aprile 2023',c:'#b8a6ff',q:'JUICE Jupiter Icy Moons Explorer',n:'JUICE',
+  d:"La missione europea verso le lune ghiacciate di Giove: Ganimede, Callisto ed Europa. Arriverà a Giove nel 2031, dopo diversi passaggi ravvicinati alla Terra e a Venere."},
+ {id:'lucy',name:'Lucy',naif:49,agency:'NASA',launch:'16 ottobre 2021',forever:true,c:'#c9ff8a',q:'Lucy mission asteroid',n:'Lucy',
+  d:"La prima missione verso gli asteroidi troiani di Giove, \"fossili\" della nascita dei pianeti. Ha già sorvolato Dinkinesh e Donaldjohanson."},
+ {id:'psyche',name:'Psyche',naif:255,agency:'NASA',launch:'13 ottobre 2023',c:'#e0b4ff',q:'Psyche spacecraft asteroid',n:'Psyche',
+  d:"Diretta verso l'asteroide metallico 16 Psyche, forse il nucleo di un pianeta mai nato. Viaggia spinta da motori ionici: la sua orbita si allarga di mese in mese."},
+ {id:'hera',name:'Hera',naif:91,agency:'ESA',launch:'7 ottobre 2024',forever:true,c:'#ffa0c8',q:'Hera mission Didymos Dimorphos',n:'Hera',
+  d:"Studia la coppia di asteroidi Didymos e Dimorphos, deviato nel 2022 dall'impatto della sonda DART: un test di difesa planetaria. Arrivo previsto alla fine del 2026."},
+ // sonde attorno a pianeti e nei punti lagrangiani (posizione indicativa)
+ {id:'juno',name:'Juno',naif:61,agency:'NASA',launch:'5 agosto 2011',host:'jupiter',mode:'orbit',k:1.45,c:'#ffd6a0',q:'Juno Jupiter',n:'Juno',
+  d:"In orbita polare attorno a Giove dal 2016: studia l'interno del pianeta, le aurore e, nei sorvoli, le lune Io, Europa e Ganimede."},
+ {id:'bepicolombo',name:'BepiColombo',naif:121,agency:'ESA / JAXA',launch:'20 ottobre 2018',host:'mercury',mode:'orbit',k:1.7,c:'#a8d8ff',q:'BepiColombo Mercury',n:'BepiColombo',
+  d:"Missione europeo-giapponese verso Mercurio, con due sonde che studieranno il pianeta da orbite diverse. Arrivo in orbita previsto alla fine del 2026."},
+ {id:'mro',name:'Mars Reconnaissance Orbiter',naif:74,agency:'NASA',launch:'12 agosto 2005',host:'mars',mode:'orbit',k:1.28,c:'#ffc2a0',q:'Mars Reconnaissance Orbiter HiRISE',n:'Mars Reconnaissance Orbiter',
+  d:"In orbita attorno a Marte dal 2006, con la fotocamera HiRISE che distingue oggetti grandi come un tavolo. Fa anche da ponte radio per i rover."},
+ {id:'odyssey',name:'Mars Odyssey',naif:53,agency:'NASA',launch:'7 aprile 2001',host:'mars',mode:'orbit',k:1.4,c:'#ffc2a0',q:'2001 Mars Odyssey',n:'Mars Odyssey',
+  d:"La sonda attiva da più tempo attorno a un altro pianeta: osserva Marte dal 2001 e ha scoperto ghiaccio d'acqua sotto la superficie."},
+ {id:'perseverance',name:'Perseverance',naif:168,agency:'NASA',launch:'30 luglio 2020',host:'mars',mode:'surface',lat:18.44,lon:77.45,c:'#7dffb0',q:'Perseverance rover',n:'Perseverance',
+  d:"Il rover che esplora il cratere Jezero, un antico lago marziano, alla ricerca di tracce di vita passata. Raccoglie campioni di roccia per un futuro ritorno sulla Terra."},
+ {id:'curiosity',name:'Curiosity',naif:76,agency:'NASA',launch:'26 novembre 2011',host:'mars',mode:'surface',lat:-4.6,lon:137.4,c:'#7dffb0',q:'Curiosity rover Gale crater',n:'Curiosity rover',
+  d:"Sul cratere Gale dal 2012, sale lungo le pendici del Monte Sharp leggendo negli strati di roccia la storia del clima di Marte."},
+ {id:'lro',name:'Lunar Reconnaissance Orbiter',naif:85,agency:'NASA',launch:'18 giugno 2009',host:'moon',mode:'orbit',k:1.5,c:'#e6e6e6',q:'Lunar Reconnaissance Orbiter',n:'Lunar Reconnaissance Orbiter',
+  d:"Mappa la Luna dal 2009 con un dettaglio di mezzo metro: ha fotografato anche i siti di atterraggio delle missioni Apollo."},
+ {id:'jwst',name:'James Webb',naif:170,agency:'NASA / ESA / CSA',launch:'25 dicembre 2021',host:'earth',mode:'L2',c:'#ffe08a',q:'James Webb Space Telescope',n:'Webb',
+  d:"Il più grande telescopio spaziale mai lanciato. Osserva nell'infrarosso dal punto lagrangiano L2, a 1,5 milioni di km dalla Terra, dalla parte opposta al Sole."},
+ {id:'soho',name:'SOHO',naif:21,agency:'ESA / NASA',launch:'2 dicembre 1995',host:'earth',mode:'L1',c:'#ffcf70',q:'SOHO solar observatory',n:'SOHO',
+  d:"Osserva il Sole senza interruzioni dal 1996 dal punto L1, tra la Terra e il Sole. Le sue immagini sono nella sezione Live; ha anche scoperto oltre 5.000 comete."}
+];
+PROBES.forEach(p=>{ p.type='probe'; p.kind = p.host ? (p.mode==='surface'?'Rover · ':'Sonda · ')+p.agency : 'Sonda · '+p.agency; p.r=0; BY[p.id]=p; });
+
+/* ---- satelliti in orbita terrestre: TLE da CelesTrak, propagazione SGP4 con satellite.js ---- */
+const SATS=[
+ {id:'iss',name:'Stazione Spaziale Internazionale',short:'ISS',catnr:25544,c:'#ffffff',q:'International Space Station',n:'International Space Station',
+  d:"Il più grande laboratorio orbitante, abitato senza interruzioni dal 2000. Fa il giro della Terra in circa 92 minuti a 400 km di quota."},
+ {id:'tiangong',name:'Tiangong',short:'Tiangong',catnr:48274,c:'#ffd2d2',q:'Tiangong space station',n:'Tiangong',
+  d:"La stazione spaziale cinese, abitata stabilmente dal 2022. Orbita a circa 390 km di quota."},
+ {id:'hubble',name:'Telescopio Hubble',short:'Hubble',catnr:20580,c:'#cfe3ff',q:'Hubble Space Telescope',n:'Hubble',
+  d:"In orbita dal 1990 a circa 520 km: ha rivoluzionato l'astronomia, dalla misura dell'età dell'Universo alle immagini delle galassie lontane."}
+];
+SATS.forEach(s=>{ s.type='sat'; s.kind='Satellite · orbita terrestre'; s.host='earth'; s.r=0; BY[s.id]=s; });
+let satLib=null;
+async function loadSats(){
+  try{
+    if(!window.satellite){ await new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/satellite.js@5/dist/satellite.min.js'; sc.onload=res; sc.onerror=rej; document.head.appendChild(sc); }); }
+    satLib=window.satellite;
+    await Promise.all(SATS.map(async s=>{
+      let tle=null; const ck='cosmo.tle.'+s.catnr;
+      try{ const c=JSON.parse(store.get(ck)||'null'); if(c && Date.now()-c.t<6*3600e3) tle=c.d; }catch(e){}
+      if(!tle){
+        const r=await fetch(`https://celestrak.org/NORAD/elements/gp.php?CATNR=${s.catnr}&FORMAT=tle`); if(!r.ok) throw new Error('HTTP '+r.status);
+        tle=(await r.text()).trim().split(/\r?\n/).map(x=>x.trim()).filter(x=>/^[12] /.test(x));
+        if(tle.length<2) throw new Error('TLE non valido'); store.set(ck,JSON.stringify({t:Date.now(),d:tle}));
+      }
+      s.rec=satLib.twoline2satrec(tle[0],tle[1]);
+    }));
+  }catch(e){ console.warn('satelliti non disponibili',e); }
+}
+function satState(s,date){
+  if(!s.rec||!satLib) return null;
+  const pv=satLib.propagate(s.rec,date); if(!pv||!pv.position) return null;
+  const g=satLib.gstime(date), geo=satLib.eciToGeodetic(pv.position,g), v=pv.velocity;
+  return {lat:geo.latitude/DEG, lon:geo.longitude/DEG, alt:geo.height, v:Math.hypot(v.x,v.y,v.z)};
+}
+
+/* ---- Deep Space Network: chi sta parlando con chi, adesso ---- */
+const DSN={byId:{}, dishes:[], t:0, ok:false};
+const STATIONS={gdscc:'Goldstone (California, USA)',mdscc:'Madrid (Spagna)',cdscc:'Canberra (Australia)'};
+async function pollDSN(){
+  try{
+    const txt=await (await fetch('https://eyes.nasa.gov/dsn/data/dsn.xml?r='+Date.now())).text();
+    const x=new DOMParser().parseFromString(txt,'text/xml'); let st=null; const byId={}, dishes=[];
+    for(const el of x.documentElement.children){
+      if(el.tagName==='station'){ st=el.getAttribute('name'); continue; }
+      if(el.tagName!=='dish') continue;
+      const dish={name:el.getAttribute('name'), station:st, act:el.getAttribute('activity'), links:[]};
+      for(const tg of el.querySelectorAll('target')){
+        const id=+tg.getAttribute('id'), code=tg.getAttribute('name'); if(id===99||id<=0) continue;
+        const down=[...el.querySelectorAll('downSignal')].find(s=>+s.getAttribute('spacecraftID')===-id || s.getAttribute('spacecraft')===code);
+        const up=[...el.querySelectorAll('upSignal')].find(s=>s.getAttribute('spacecraft')===code);
+        const link={id,code,dish:dish.name,station:st,range:+tg.getAttribute('downlegRange'),rtlt:+tg.getAttribute('rtlt'),
+          down:down?{on:down.getAttribute('active')==='true',rate:+down.getAttribute('dataRate'),band:down.getAttribute('band'),type:down.getAttribute('signalType')}:null,
+          up:up?{on:up.getAttribute('active')==='true',power:+up.getAttribute('power')}:null};
+        link.active = !!((link.down&&link.down.on)||(link.up&&link.up.on));
+        dish.links.push(link); (byId[id] ||= []).push(link);
+      }
+      dishes.push(dish);
+    }
+    Object.assign(DSN,{byId,dishes,t:Date.now(),ok:true});
+    if(curBody && curBody.type) renderLive();
+    if($('#live').classList.contains('open')) renderDSNCard();
+  }catch(e){ DSN.ok=false; }
+}
+const dsnLinks = p => (p.naif && DSN.byId[p.naif]) || [];
+const fmtRate = b => b>=1e6 ? (b/1e6).toLocaleString('it-IT',{maximumFractionDigits:1})+' Mb/s' : b>=1e3 ? (b/1e3).toLocaleString('it-IT',{maximumFractionDigits:1})+' kb/s' : Math.round(b)+' b/s';
+const fmtKm = km => km>=1e9 ? (km/1e9).toLocaleString('it-IT',{maximumFractionDigits:2})+' miliardi di km' : km>=1e6 ? (km/1e6).toLocaleString('it-IT',{maximumFractionDigits:1})+' milioni di km' : Math.round(km).toLocaleString('it-IT')+' km';
+const fmtDur = s => s>=3600 ? Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' min' : s>=60 ? Math.floor(s/60)+' min '+Math.round(s%60)+' s' : s.toLocaleString('it-IT',{maximumFractionDigits:1})+' s';
+
+/* ---- posizione sul globo disegnato (per rover e satelliti) ---- */
+function sphereProject(host,lat,lon,f){
+  const [tz,inc]=tiltOf(host), ct=Math.cos(tz), st=Math.sin(tz), ci=Math.cos(inc), si=Math.sin(inc);
+  const E=[ct,st,0], N=[ci*st,-ci*ct,si], Z=[N[1]*E[2]-N[2]*E[1], N[2]*E[0]-N[0]*E[2], N[0]*E[1]-N[1]*E[0]];
+  const lv=((lon+180)/360 + (ROT[host.id]||0) - .5)*2*Math.PI, la=lat*DEG;
+  const bx=Math.cos(la)*Math.sin(lv), by=Math.sin(la), bz=Math.cos(la)*Math.cos(lv);
+  return {x:(bx*E[0]+by*N[0]+bz*Z[0])*f, y:(bx*E[1]+by*N[1]+bz*Z[1])*f, z:bx*E[2]+by*N[2]+bz*Z[2]};
+}
+function hostScreen(id){ const h=BY[id], w=pos(h); return {h,p:w2s(w.x,w.y),rad:Math.max(1,h.r*cam.s)}; }
+function hostedPos(p){ // posizione mondo delle sonde ospitate (indicativa)
+  const h=BY[p.host], hp=pos(h);
+  if(p.mode==='orbit'){ const th=(Date.now()/1000)*(2*Math.PI/(40+p.naif%17*3)) + p.naif; const R=h.r*p.k; return {x:hp.x+R*Math.cos(th), y:hp.y-R*Math.sin(th)}; }
+  if(p.mode==='L1'||p.mode==='L2'){ const l=Math.hypot(hp.x,hp.y)||1, sg=p.mode==='L2'?1:-1, R=h.r*4.2; return {x:hp.x+sg*hp.x/l*R, y:hp.y+sg*hp.y/l*R}; }
+  return hp;
+}
+function probeWorld(p){
+  if(p.type==='sat') return pos(BY.earth);
+  if(p.host) return hostedPos(p);
+  const v=probeXYZ(p,simDays); return v?h2w(v):null;
+}
+
+/* ---- disegno di sonde e satelliti ---- */
+let probeMode=false;
+function drawCraft(p,x,y,sel){
+  const links=dsnLinks(p), on=links.some(l=>l.active);
+  if(on){ const ph=(performance.now()/1000)%1.6/1.6; ctx.strokeStyle=`rgba(120,255,170,${.7*(1-ph)})`; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,y,5+ph*12,0,7); ctx.stroke(); }
+  ctx.save(); ctx.translate(x,y);
+  if(sel){ ctx.strokeStyle='#ffb547'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(0,0,9,0,7); ctx.stroke(); }
+  ctx.strokeStyle=p.c; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(7,0); ctx.stroke(); // pannelli
+  ctx.fillStyle=p.c; ctx.fillRect(-7,-2,3,4); ctx.fillRect(4,-2,3,4);
+  ctx.rotate(Math.PI/4); ctx.fillRect(-2.6,-2.6,5.2,5.2);
+  ctx.restore();
+}
+function drawTrajectory(p){
+  if(p.host) return;
+  const pts=[]; for(let d=-150; d<=300; d+=3){ const v=probeXYZ(p,simDays+d); if(v) pts.push([d,w2s(...Object.values(h2w(v)))]); }
+  if(pts.length<2) return;
+  ctx.save(); ctx.lineWidth=1.3;
+  for(const fut of [false,true]){
+    ctx.setLineDash(fut?[4,5]:[]); ctx.strokeStyle=fut?p.c+'aa':p.c+'66'; ctx.beginPath(); let st=false;
+    for(const [d,q] of pts){ if((d>=0)!==fut && !(fut&&d===0)) continue; st?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); st=true; }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawProbes(drawn){
+  const showAll = probeMode || cam.s>overviewScale()*1.8;
+  const sel = selected && BY[selected].type ? BY[selected] : null;
+  if(sel && sel.type==='probe') drawTrajectory(sel);
+  const probeLabels=[];
+  for(const p of PROBES){
+    let x,y;
+    if(p.host){
+      const {h,p:hp,rad}=hostScreen(p.host);
+      if(rad<(p.host==='moon'?6:9) && selected!==p.id) continue;
+      if(p.mode==='surface'){ const q=sphereProject(h,p.lat,p.lon,rad);
+        if(q.z<=0.05){ if(selected===p.id){ ctx.save(); ctx.setLineDash([3,3]); ctx.strokeStyle='rgba(255,181,71,.7)'; ctx.beginPath(); ctx.arc(hp.x+q.x,hp.y+q.y,7,0,7); ctx.stroke(); ctx.restore();
+          ctx.font='500 11px Inter, sans-serif'; ctx.textAlign='center'; ctx.fillStyle='rgba(255,181,71,.85)'; ctx.fillText(p.name+' (sul lato nascosto, ricomparirà con la rotazione)',hp.x,hp.y+rad+32); } continue; }
+        x=hp.x+q.x; y=hp.y+q.y; }
+      else { const w=hostedPos(p), s=w2s(w.x,w.y); x=s.x; y=s.y; }
+    } else {
+      const w=probeWorld(p); if(!w) continue; const s=w2s(w.x,w.y); x=s.x; y=s.y;
+      if(selected!==p.id && drawn.some(o=>!o.b.type && o.rad>12 && Math.hypot(o.p.x-x,o.p.y-y)<o.rad*1.2)) continue; // vicino a un pianeta ingrandito: non coprirlo
+    }
+    if(x<-30||x>W+30||y<-30||y>H+30) continue;
+    if(p.mode==='surface'){ ctx.fillStyle=p.c; ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,y-7); ctx.lineTo(x+4,y); ctx.lineTo(x-4,y); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else drawCraft(p,x,y,selected===p.id);
+    drawn.push({b:p,p:{x,y},rad:6,hit:11});
+    const lw=(p.name.length+3)*6.4, mine=selected===p.id||hover===p.id;
+    const clash=!mine && probeLabels.some(q=>Math.abs(q.y-y)<12 && x+10<q.x+q.w && x+10+lw>q.x);
+    if((showAll && !clash) || mine){
+      probeLabels.push({x:x+10,y,w:lw});
+      const on=dsnLinks(p).some(l=>l.active);
+      ctx.font=`${selected===p.id?600:500} 11px Inter, sans-serif`; ctx.textAlign='left';
+      ctx.fillStyle = selected===p.id||hover===p.id ? '#ffb547' : 'rgba(210,225,255,.85)';
+      ctx.fillText(p.name+(on?' 📡':''), x+10, y+4);
+    }
+  }
+  // satelliti attorno alla Terra (posizione reale, quota ingrandita ×2 per leggibilità)
+  const {h:earth,p:ep,rad:er}=hostScreen('earth');
+  if(er>=14 && satLib){
+    const now=new Date();
+    for(const s of SATS){
+      const st=satState(s,now); if(!st) continue; s.state=st;
+      const f=er*(1+2*st.alt/6371), q=sphereProject(earth,st.lat,st.lon,f);
+      if(q.z<0 && Math.hypot(q.x,q.y)<er) continue; // dietro la Terra
+      if(selected===s.id){ // traccia dei prossimi 90 minuti
+        ctx.save(); ctx.strokeStyle='rgba(255,181,71,.6)'; ctx.setLineDash([3,4]); ctx.beginPath(); let started=false;
+        for(let m=0;m<=92;m+=2){ const st2=satState(s,new Date(now.getTime()+m*60e3)); if(!st2) continue; const q2=sphereProject(earth,st2.lat,st2.lon,er*(1+2*st2.alt/6371));
+          if(q2.z<0 && Math.hypot(q2.x,q2.y)<er){ started=false; continue; } started?ctx.lineTo(ep.x+q2.x,ep.y+q2.y):ctx.moveTo(ep.x+q2.x,ep.y+q2.y); started=true; }
+        ctx.stroke(); ctx.restore();
+      }
+      const x=ep.x+q.x, y=ep.y+q.y;
+      drawCraft(s,x,y,selected===s.id); drawn.push({b:s,p:{x,y},rad:6,hit:11});
+      if(er>40 || selected===s.id || hover===s.id){ ctx.font='500 11px Inter, sans-serif'; ctx.textAlign='left'; ctx.fillStyle=selected===s.id||hover===s.id?'#ffb547':'rgba(230,236,255,.9)'; ctx.fillText(s.short,x+10,y+4); }
+    }
+  }
+}
+
+/* ---- dati in tempo reale nel pannello ---- */
+function liveFacts(b){
+  if(b.type==='sat'){
+    const st=satState(b,new Date()); if(!st) return [['Stato','Caricamento orbita…']];
+    return [['Latitudine',st.lat.toFixed(2)+'°'],['Longitudine',st.lon.toFixed(2)+'°'],['Altitudine',Math.round(st.alt).toLocaleString('it-IT')+' km'],['Velocità',Math.round(st.v*3600).toLocaleString('it-IT')+' km/h']];
+  }
+  const f=[['Lancio',b.launch]];
+  if(b.host){
+    const where = b.mode==='surface' ? 'Sulla superficie di '+BY[b.host].name : b.mode==='L2' ? 'Punto L2 Sole-Terra' : b.mode==='L1' ? 'Punto L1 Sole-Terra' : 'In orbita attorno a '+BY[b.host].name;
+    f.push(['Dove si trova',where]);
+  } else {
+    const v=probeXYZ(b,simDays);
+    if(!v){ f.push(['Posizione','Non disponibile per questa data']); return f; }
+    const e=planetXYZ('earth',simDays), rs=Math.hypot(...v), re=Math.hypot(v[0]-e[0],v[1]-e[1],v[2]-e[2]);
+    const v2=probeXYZ(b,simDays+.25), sp=v2?Math.hypot(v2[0]-v[0],v2[1]-v[1],v2[2]-v[2])/.25*AU_KM/86400:0;
+    f.push(['Distanza dal Sole',rs.toLocaleString('it-IT',{maximumFractionDigits:2})+' UA · '+fmtKm(rs*AU_KM)]);
+    f.push(['Distanza dalla Terra',fmtKm(re*AU_KM)]);
+    f.push(['Il segnale radio impiega',fmtDur(re*AU_KM/299792.458)]);
+    f.push(['Velocità rispetto al Sole',(sp).toLocaleString('it-IT',{maximumFractionDigits:1})+' km/s']);
+  }
+  return f;
+}
+function renderLive(){
+  const b=curBody; if(!b||!b.type) { $('#plive').innerHTML=''; return; }
+  $('#pfacts').innerHTML=liveFacts(b).map(([k,v])=>`<div class="fact"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+  if(b.type==='sat'){ $('#plive').innerHTML=`<div class="dsn on"><b>🛰 Posizione in tempo reale</b> · orbita da CelesTrak, aggiornata ogni secondo</div>`; return; }
+  const note = b.host ? '' : `<div class="dsn-note">Distanze e velocità alla data mostrata in alto · posizioni da NASA/JPL Horizons</div>`;
+  if(!DSN.ok){ $('#plive').innerHTML=`<div class="dsn">📡 Stato del Deep Space Network in caricamento…</div>`+note; return; }
+  const links=dsnLinks(b), act=links.filter(l=>l.active);
+  let h;
+  if(act.length){
+    h=act.map(l=>`<div class="dsn on"><b>📡 In contatto con la Terra adesso</b><br>Antenna ${esc(l.dish.replace('DSS','DSS-'))} · ${esc(STATIONS[l.station]||l.station)}<br>
+      ${l.down&&l.down.on?`Riceve ${l.down.type==='data'?'dati':'segnale'} a <b>${fmtRate(l.down.rate)}</b> (banda ${esc(l.down.band)})`:''}${l.up&&l.up.on?`${l.down&&l.down.on?' · ':''}Trasmette comandi`:''}
+      ${l.range>0?`<br>Distanza misurata: ${fmtKm(l.range)} · andata e ritorno del segnale: ${fmtDur(l.rtlt)}`:''}</div>`).join('');
+  } else if(links.length){
+    const l=links[0]; h=`<div class="dsn wait"><b>📡 Antenna puntata, collegamento in preparazione</b><br>${esc(l.dish.replace('DSS','DSS-'))} · ${esc(STATIONS[l.station]||l.station)}${l.range>0?' · distanza '+fmtKm(l.range):''}</div>`;
+  } else h=`<div class="dsn">📡 In questo momento nessuna antenna del Deep Space Network sta comunicando con ${esc(b.name)}.</div>`;
+  $('#plive').innerHTML=h+`<div class="dsn-note">Dati DSN Now aggiornati alle ${new Date(DSN.t).toLocaleTimeString('it-IT')}</div>`+note;
+}
+setInterval(()=>{ if(curBody&&curBody.type&&$('#panel').classList.contains('open')) renderLive(); },1000);
+
+/* ---- riquadro Live: antenne del Deep Space Network ---- */
+const DSN_NAMES={31:'Voyager 1',32:'Voyager 2',98:'New Horizons',96:'Parker Solar Probe',144:'Solar Orbiter',159:'Europa Clipper',28:'JUICE',49:'Lucy',255:'Psyche',91:'Hera',61:'Juno',121:'BepiColombo',74:'Mars Reconnaissance Orbiter',53:'Mars Odyssey',168:'Perseverance',76:'Curiosity',85:'Lunar Reconnaissance Orbiter',170:'James Webb',21:'SOHO',92:'ACE',151:'Chandra',64:'OSIRIS-APEX',143:'ExoMars TGO',41:'Mars Express',202:'MAVEN',62:'Emirates Mars Mission',155:'Danuri (KPLO)',10:'ESCAPADE',108:'MMS'};
+function renderDSNCard(){
+  const box=$('#dsnbox'); if(!box) return;
+  if(!DSN.ok){ box.innerHTML='<div class="err">Dati del Deep Space Network non disponibili al momento.</div>'; return; }
+  const by={gdscc:[],mdscc:[],cdscc:[]};
+  for(const d of DSN.dishes) for(const l of d.links) (by[d.station] ||= []).push(l);
+  box.innerHTML=`<div class="dsngrid">${Object.entries(by).map(([st,ls])=>`<div class="dsncol"><h4>${esc(STATIONS[st]||st)}</h4>${
+    ls.length? ls.map(l=>{ const p=PROBES.find(x=>x.naif===l.id); const nm=DSN_NAMES[l.id]||l.code;
+      return `<div class="dsnrow ${l.active?'on':''}" ${p?`data-id="${p.id}"`:''}><span class="led"></span><div><b>${esc(nm)}</b>${p?' ↗':''}<br><small>${esc(l.dish.replace('DSS','DSS-'))}${l.down&&l.down.on&&l.down.rate?' · '+fmtRate(l.down.rate):''}${l.range>0?' · '+fmtKm(l.range):''}</small></div></div>`; }).join('')
+      : '<small class="muted">Nessun collegamento attivo</small>'}</div>`).join('')}</div>
+    <div class="dsn-note">Aggiornato alle ${new Date(DSN.t).toLocaleTimeString('it-IT')} · si aggiorna ogni 20 secondi · fonte: NASA DSN Now</div>`;
+  box.querySelectorAll('.dsnrow[data-id]').forEach(r=>r.onclick=()=>{ closeLive(); select(r.dataset.id); });
 }
 
 /* ========== disegno ========== */
@@ -549,7 +902,8 @@ function showCredits(){
   $('#lbcap').innerHTML=`<h3>Crediti delle immagini dei pianeti</h3><p style="max-height:60vh">
   Mappe di Sole, Mercurio, Terra (con nuvole), Luna, Marte, Giove, Saturno, Urano e Nettuno: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a>, basate su dati NASA — licenza CC BY 4.0.<br><br>
   Mappe di Venere (nubi), Plutone, Caronte e delle lune dei pianeti esterni: progetto <a href="https://github.com/Stellarium/stellarium/blob/master/CREDITS.md" target="_blank" rel="noopener">Stellarium</a> — elaborazioni di Oleg Pluton (Helleformer), Kexitt, Snowfall, FarGetaNik, Magenta Meteorite (CC BY 4.0); Callisto di John van Vliet da dati PDS (CC BY-SA); Dione ed Encelado da dati Cassini, NASA/CICLOPS (pubblico dominio); Giapeto di Fridger Schrempp, progetto Celestia (GPL); Phobos e altre da maps.jpl.nasa.gov (David Seal, NASA/JPL). Profilo degli anelli di Saturno: Stellarium.<br><br>
-  Le mappe sono state ridimensionate per il web.</p>`;
+  Le mappe sono state ridimensionate per il web.<br><br>
+  <b>Sonde e satelliti:</b> posizioni delle sonde calcolate dagli elementi orbitali di <a href="https://ssd.jpl.nasa.gov/horizons/" target="_blank" rel="noopener">NASA/JPL Horizons</a> (ottobre 2026 – novembre 2028); orbite dei pianeti dagli elementi kepleriani JPL; stato delle antenne da <a href="https://eyes.nasa.gov/dsn/dsn.html" target="_blank" rel="noopener">NASA DSN Now</a>; orbite dei satelliti da <a href="https://celestrak.org" target="_blank" rel="noopener">CelesTrak</a>, calcolate con satellite.js. Le posizioni di sonde in orbita attorno ai pianeti, nei punti lagrangiani e la quota dei satelliti sono indicative.</p>`;
   $('#lb').classList.add('open');
 }
 
@@ -619,11 +973,10 @@ function frame(t){
   }
   // orbite
   ctx.lineWidth=1;
-  for(const b of BODIES){
-    if(!b.L0) continue;
-    const c=w2s(0,0), R=orbitR(b.a)*cam.s;
-    ctx.strokeStyle = (selected===b.id||hover===b.id)?'rgba(255,181,71,.55)':'rgba(140,160,210,.16)';
-    ctx.beginPath(); ctx.arc(c.x,c.y,R,0,7); ctx.stroke();
+  if(orbitPathsAt===null || Math.abs(simDays-orbitPathsAt)>200) buildOrbitPaths();
+  for(const id in ORBIT_PATHS){
+    ctx.strokeStyle = (selected===id||hover===id)?'rgba(255,181,71,.55)':'rgba(140,160,210,.16)';
+    ctx.beginPath(); ORBIT_PATHS[id].forEach((w,i)=>{ const q=w2s(w.x,w.y); i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y); }); ctx.stroke();
   }
   // fascia degli asteroidi
   { const c=w2s(0,0); ctx.save(); ctx.globalAlpha=.25; ctx.fillStyle='#8d8a80';
@@ -655,6 +1008,7 @@ function frame(t){
       for(const q of placed){ if(Math.abs(q.x-p.x)<(q.w+w)/2+4 && Math.abs(q.y-ly)<14){ ly = p.y-rad-8; break; } }
       placed.push({x:p.x,y:ly,w}); label(b.name,p.x,ly,selected===b.id||hover===b.id,false); }
   }
+  drawProbes(drawn);
   frame.drawn=drawn;
   $('#simdate').textContent = new Date(J2000+simDays*864e5).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'});
   requestAnimationFrame(frame);
@@ -708,10 +1062,10 @@ cv.addEventListener('wheel',e=>{
 },{passive:false});
 
 function select(id){
-  const b=BY[id]; selected=id; follow=id;
+  const b=BY[id]; selected=id; follow=(b.type && b.host) ? b.host : id;
   openPanel(b);
   requestAnimationFrame(()=>{ tgt.s=focusScale(b); });
-  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.id===id||c.dataset.id===b.parent));
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.id===id||c.dataset.id===b.parent||(!b.type&&false)));
   try{ history.replaceState(null,'','#'+id); }catch(e){}
 }
 function overview(){
@@ -728,9 +1082,11 @@ function openPanel(b){
   $('#pkicker').textContent=b.kind;
   $('#ptitle').textContent=b.name;
   $('#pdesc').textContent=b.d;
-  $('#pfacts').innerHTML=b.f.map(([k,v])=>`<div class="fact"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
-  $('#pmoons').innerHTML = b.moons ? b.moons.map(m=>`<button data-id="${m.id}">☾ ${esc(m.name)}</button>`).join('') : '';
-  const par=$('#pparent'); if(b.parent){ par.textContent='← Torna a '+BY[b.parent].name; par.onclick=()=>select(b.parent); par.style.display='inline-block'; } else par.style.display='none';
+  if(b.type){ renderLive(); } else { $('#plive').innerHTML=''; $('#pfacts').innerHTML=b.f.map(([k,v])=>`<div class="fact"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join(''); }
+  const crafts = b.type ? [] : [...PROBES.filter(p=>p.host===b.id), ...(b.id==='earth'?SATS:[])];
+  $('#pmoons').innerHTML = (b.moons ? b.moons.map(m=>`<button data-id="${m.id}">☾ ${esc(m.name)}</button>`).join('') : '') + crafts.map(p=>`<button data-id="${p.id}" class="craftbtn">🛰 ${esc(p.short||p.name)}</button>`).join('');
+  const parId = b.parent || (b.host && b.host);
+  const par=$('#pparent'); if(parId){ par.textContent='← Torna a '+BY[parId].name; par.onclick=()=>select(parId); par.style.display='inline-block'; } else par.style.display='none';
   $('#sinput').value=''; $('#sinput').placeholder=`Affina la ricerca (in inglese), es. "${b.q}"`;
   $('#panel').classList.add('open'); document.body.classList.add('panel-open');
   loadTab(curTab,true);
@@ -836,8 +1192,14 @@ async function openVideo(it){
 }
 
 /* ========== chips ========== */
-$('#chips').innerHTML = BODIES.filter(b=>!b.parent).map(b=>`<button class="chip" data-id="${b.id}"><i style="background:${b.c[1]}"></i>${b.name}</button>`).join('');
-$('#chips').addEventListener('click',e=>{ const id=e.target.closest('.chip')?.dataset.id; if(id) select(id); });
+function renderChips(){
+  $('#chips').innerHTML = probeMode
+    ? `<button class="chip mode" data-mode="planets">🪐 Pianeti</button>` + [...PROBES.filter(p=>!p.host), ...PROBES.filter(p=>p.host), ...SATS].map(p=>`<button class="chip" data-id="${p.id}"><i style="background:${p.c}"></i>${esc(p.short||p.name)}</button>`).join('')
+    : BODIES.filter(b=>!b.parent).map(b=>`<button class="chip" data-id="${b.id}"><i style="background:${b.c[1]}"></i>${b.name}</button>`).join('') + `<button class="chip mode" data-mode="probes">🛰 Sonde e satelliti</button>`;
+  if(selected) document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.id===selected));
+}
+renderChips();
+$('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; if(c.dataset.mode){ probeMode=c.dataset.mode==='probes'; renderChips(); $('#chips').scrollLeft=0; return; } select(c.dataset.id); });
 $('#speed').onchange=e=>speed=+e.target.value;
 $('#today').onclick=()=>{ simDays=nowDays(); };
 $('#overview').onclick=overview;
@@ -883,6 +1245,7 @@ function buildLive(){
       `<div class="cb" id="epicbox"><div class="spin"></div></div>`, `<span id="epicinfo">—</span><button class="btn" id="epicplay" style="padding:4px 10px">▶ Rotazione</button>`)
   + card('c6','Vento solare ed espulsioni','SOHO (ESA/NASA) · coronografi e ultravioletto',NEAR,
       `<div class="cb"><img id="sohoimg" alt="SOHO" src="${bust(SOHO[0][1])}" ${imgFail}></div>`, seg('soho',SOHO)+'<span>Il disco bianco indica la posizione del Sole</span>')
+  + card('c12','Deep Space Network adesso','Le grandi antenne NASA in California, Spagna e Australia: con chi stanno parlando in questo momento',LIVE,`<div id="dsnbox"><div class="spin"></div></div>`,'')
   + card('c12','Altre dirette e finestre sullo spazio','Si aprono in una nuova scheda','',
       `<div class="links">
         <a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener"><b>NASA · tutte le dirette</b><small>Lanci, ISS, conferenze stampa</small></a>
@@ -906,7 +1269,7 @@ function buildLive(){
     if(n==='goes') swapImg('#goesimg',GOES[i][1]);
     if(n==='soho') swapImg('#sohoimg',SOHO[i][1]);
   }));
-  loadEPIC(); initISS();
+  loadEPIC(); initISS(); renderDSNCard();
 }
 /* --- Dirette YouTube ---
    ID delle dirette 24/7 (verificati il 17/11/2026). Se un giorno una non funziona,
@@ -1087,8 +1450,9 @@ addEventListener('resize',()=>{ resize(); if(selected) tgt.s=focusScale(BY[selec
 cam.s=tgt.s=overviewScale()*0.55;
 requestAnimationFrame(()=>{ tgt.s=overviewScale(); });
 requestAnimationFrame(frame);
+loadSats(); pollDSN(); setInterval(pollDSN,20000);
 const h=location.hash.slice(1);
-if(h==='live') openLive(); else if(BY[h]) setTimeout(()=>select(h),400);
+if(h==='live') openLive(); else if(BY[h]){ if(BY[h].type){ probeMode=true; renderChips(); } setTimeout(()=>select(h),400); }
 </script>
 </body>
 </html>

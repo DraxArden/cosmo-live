@@ -38,6 +38,14 @@ Puoi anche scaricare `index.html` e aprirlo con un doppio clic: funziona tutto t
 
 - Le posizioni dei pianeti sono calcolate per la data reale (orbite circolari approssimate). Le distanze sono in scala logaritmica, così ci stanno tutti. Le lune più veloci sono rallentate per renderle leggibili.
 
+## Sonde e satelliti
+
+- **Sonde nello spazio profondo** (Voyager, New Horizons, Parker, Solar Orbiter, Europa Clipper, JUICE, Lucy, Psyche, Hera): posizioni calcolate con le leggi di Keplero dagli elementi orbitali di **NASA/JPL Horizons**, uno ogni 30 giorni, salvati in `data/probe-elements.txt` e incorporati in `index.html`. Coprono **dal 1° ottobre 2026 al 17 novembre 2028**: per allungare il periodo vanno riscaricati da JPL.
+- **Sonde attorno ai pianeti e nei punti lagrangiani** (Juno, BepiColombo, MRO, Mars Odyssey, LRO, James Webb, SOHO) e **rover** (Perseverance, Curiosity): posizione indicativa vicino al loro pianeta. I rover sono disegnati sul punto reale della superficie.
+- **Contatti radio in tempo reale**: dal Deep Space Network della NASA (DSN Now), aggiornati ogni 20 secondi. Le sonde in contatto hanno un'onda verde e l'icona 📡.
+- **Satelliti** (ISS, Tiangong, Hubble): orbite da CelesTrak, calcolate in tempo reale con satellite.js. La quota è ingrandita ×2 per leggibilità.
+- Le **orbite dei pianeti** sono ellissi reali, calcolate con gli elementi kepleriani di JPL.
+
 ## Aggiungere o cambiare una diretta
 
 Le dirette sono nell'elenco `STREAM_GROUPS` dentro `index.html`. Ognuna ha un nome, il canale, l'`id` del video YouTube (la parte dopo `watch?v=`) e il fuso orario del luogo. Se una diretta finisce, l'app passa da sola alla successiva della stessa categoria. Per sostituirla basta cambiare l'`id`.
