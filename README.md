@@ -30,8 +30,12 @@ Puoi anche scaricare `index.html` e aprirlo con un doppio clic: funziona tutto t
 | Posizione ISS | wheretheiss.at |
 | Il Sole | NASA SDO, ESA/NASA SOHO |
 | La Terra | NOAA GOES-19 / GOES-18, NASA DSCOVR EPIC |
-| Diretta video | canale YouTube NASA |
+| Dirette video | YouTube: NASA, Sen (ISS) · Asahi Astro LIVE (Subaru, CFHT, ALMA, Kiso) · explore.org e Starlapland (aurore) · NASASpaceflight (Starbase, Space Coast) |
 
 ## Note
 
 - Le posizioni dei pianeti sono calcolate per la data reale (orbite circolari approssimate). Le distanze sono in scala logaritmica, così ci stanno tutti. Le lune più veloci sono rallentate per renderle leggibili.
+
+## Aggiungere o cambiare una diretta
+
+Le dirette sono nell'elenco `STREAM_GROUPS` dentro `index.html`. Ognuna ha un nome, il canale, l'`id` del video YouTube (la parte dopo `watch?v=`) e il fuso orario del luogo. Se una diretta finisce, l'app passa da sola alla successiva della stessa categoria. Per sostituirla basta cambiare l'`id`.
