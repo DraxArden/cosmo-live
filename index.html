@@ -137,6 +137,13 @@ a{color:var(--accent2)}
 .links a:hover{border-color:var(--accent)}
 .links a b{display:block;font-family:var(--head);font-size:14px}
 .links a small{color:var(--muted);font-size:12px}
+.ytctl{display:flex;flex-direction:column;gap:8px;width:100%}
+.ytgroups button{font-weight:600;font-size:12px}
+.ytgroups button.on{background:rgba(255,181,71,.12)}
+.ytinfo{font-size:12.5px;color:#aab2c8;line-height:1.5}
+.ytinfo b{color:var(--text)}
+.clock{display:inline-block;margin-left:4px;font-size:11.5px;padding:1px 7px;border-radius:5px;background:var(--panel2)}
+.clock.day{color:var(--accent)}
 .err{color:#ff8a96;font-size:12.5px;padding:20px;text-align:center}
 
 .controls,.chips{transition:margin .45s cubic-bezier(.2,.8,.2,1),right .45s cubic-bezier(.2,.8,.2,1)}
@@ -688,10 +695,10 @@ const imgFail = `onerror="this.replaceWith(Object.assign(document.createElement(
 function buildLive(){
   const fileProto = location.protocol==='file:';
   $('#lgrid').innerHTML =
-    card('c8','In diretta dalla ISS','La Terra vista dalla Stazione Spaziale Internazionale, 24 ore su 24',LIVE,
+    card('c8','Dirette video','Dallo spazio, dagli osservatori, dalle aurore e dalle basi di lancio',LIVE,
       `<div class="yt"><div id="ytplayer"></div>
         <div class="note" id="ytnote">Per vedere le dirette YouTube dentro l'app, aprila dal suo indirizzo web: draxarden.github.io/cosmo-live.<br><a class="btn" href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">Apri le dirette NASA su YouTube ↗</a></div></div>`,
-      seg('yt',STREAMS.map(x=>[x.name])) + `<a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">Eventi NASA in diretta ↗</a>`)
+      `<div class="ytctl"><div class="seg ytgroups" id="ytgroups"></div><div class="seg" id="ytitems"></div><div class="ytinfo" id="ytinfo"></div></div>`)
   + card('c4','Dove si trova la ISS','Posizione in tempo reale della Stazione Spaziale',LIVE,
       `<div class="cb" style="min-height:0;flex:none"><canvas id="issmap" style="width:100%;aspect-ratio:2/1;display:block"></canvas></div>
        <div class="issstats"><div><b>Latitudine</b><span id="isslat">—</span></div><div><b>Longitudine</b><span id="isslon">—</span></div><div><b>Altitudine</b><span id="issalt">—</span></div><div><b>Velocità</b><span id="issvel">—</span></div></div>`,
@@ -723,7 +730,6 @@ function buildLive(){
   document.querySelectorAll('.seg').forEach(s=>s.addEventListener('click',e=>{
     const b=e.target.closest('button'); if(!b) return;
     s.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); const i=+b.dataset.i, n=s.dataset.seg;
-    if(n==='yt') playStream(i);
     if(n==='sdo') swapImg('#sdoimg',sdoURL(SDO[i][1]));
     if(n==='goes') swapImg('#goesimg',GOES[i][1]);
     if(n==='soho') swapImg('#sohoimg',SOHO[i][1]);
@@ -733,21 +739,59 @@ function buildLive(){
 /* --- Dirette YouTube ---
    ID delle dirette 24/7 (verificati il 17/11/2026). Se un giorno una non funziona,
    l'app passa da sola alla successiva; per aggiornarle basta cambiare l'id qui. */
-const STREAMS = [
-  {name:'NASA · ISS in HD', id:'ROboUHfPUrU'},
-  {name:'NASA · ISS ufficiale', id:'M3HKLzjvKPc'},
-  {name:'Sen · Terra in 4K', id:'fO9e9jnhYK8'}
+const STREAM_GROUPS = [
+  {name:'Dallo spazio', items:[
+    {name:'ISS in HD', who:'NASA', id:'ROboUHfPUrU', tz:null, d:'Telecamere esterne della Stazione Spaziale: la Terra che scorre a 28.000 km/h.'},
+    {name:'ISS ufficiale', who:'NASA', id:'M3HKLzjvKPc', tz:null, d:'Il canale video ufficiale della ISS, con le comunicazioni dell\'equipaggio quando attive.'},
+    {name:'Terra in 4K', who:'Sen', id:'fO9e9jnhYK8', tz:null, d:'Le telecamere 4K di Sen installate a bordo della ISS.'}]},
+  {name:'Osservatori', items:[
+    {name:'Subaru · Mauna Kea Est', who:'Asahi Astro LIVE', id:'OVcVOJYXUsc', tz:'Pacific/Honolulu', d:'Il cielo sopra il telescopio Subaru (NAOJ) a 4.200 m sul Mauna Kea, Hawaii: stelle, Via Lattea e meteore.'},
+    {name:'CFHT · Mauna Kea Ovest', who:'Asahi Astro LIVE', id:'Q3UhCgsWDw8', tz:'Pacific/Honolulu', d:'Vista verso ovest dal telescopio Canada-France-Hawaii, accanto agli altri osservatori della vetta.'},
+    {name:'ALMA · Cile', who:'Asahi Astro LIVE', id:'BVKRAzTSnB0', tz:'America/Santiago', d:'Le antenne del radiotelescopio ALMA a 5.000 m nel deserto di Atacama, sotto uno dei cieli più bui del pianeta.'},
+    {name:'Kiso · Giappone', who:'Asahi Astro LIVE', id:'_HZDjlfTuvQ', tz:'Asia/Tokyo', d:'L\'osservatorio Kiso dell\'Università di Tokyo, sulle montagne di Nagano.'}]},
+  {name:'Aurore', items:[
+    {name:'Fairbanks · Alaska', who:'explore.org', id:'O52zDyxg5QI', tz:'America/Anchorage', d:'Una delle webcam di aurore più famose, puntata sul cielo dell\'Alaska.'},
+    {name:'Kilpisjärvi · Finlandia', who:'Starlapland', id:'ccTVAhJU5lg', tz:'Europe/Helsinki', d:'Il cielo della Lapponia finlandese, nel cuore dell\'ovale aurorale.'}]},
+  {name:'Basi di lancio', items:[
+    {name:'Starbase · Texas', who:'NASASpaceflight', id:'mhJRzQsLZGg', tz:'America/Chicago', d:'La base SpaceX di Boca Chica dove si costruiscono e lanciano Starship e Super Heavy.'},
+    {name:'Space Coast · Florida', who:'NASASpaceflight', id:'Jm8wRjD3xVA', tz:'America/New_York', d:'Cape Canaveral e il Kennedy Space Center: Falcon 9, Vulcan, New Glenn.'}]}
 ];
-let ytPlayer=null, ytIdx=0, ytTried=new Set();
+let ytPlayer=null, ytGroup=0, ytIdx=0, ytTried=new Set(), ytClock=null;
+window.ytErrors=[];
+const curStream=()=>STREAM_GROUPS[ytGroup].items[ytIdx];
+function renderStreamUI(){
+  $('#ytgroups').innerHTML=STREAM_GROUPS.map((g,i)=>`<button class="${i===ytGroup?'on':''}" data-g="${i}">${g.name}</button>`).join('');
+  $('#ytitems').innerHTML=STREAM_GROUPS[ytGroup].items.map((x,i)=>`<button class="${i===ytIdx?'on':''}" data-i="${i}">${esc(x.name)}</button>`).join('');
+  const st=curStream();
+  $('#ytinfo').innerHTML=`<b>${esc(st.name)}</b> · ${esc(st.who)} — ${esc(st.d)} <span id="ytclock"></span> <a href="https://www.youtube.com/watch?v=${st.id}" target="_blank" rel="noopener">Apri su YouTube ↗</a>`;
+  tickClock();
+}
+function tickClock(){
+  const el=$('#ytclock'); if(!el) return; const st=curStream();
+  if(!st.tz){ el.textContent=''; return; }
+  const now=new Date(), h=+now.toLocaleString('en-GB',{timeZone:st.tz,hour:'2-digit',hour12:false});
+  const t=now.toLocaleTimeString('it-IT',{timeZone:st.tz,hour:'2-digit',minute:'2-digit'});
+  const night = h>=19||h<6;
+  el.innerHTML=`<span class="clock ${night?'night':'day'}">${night?'🌙':'☀️'} lì sono le ${t}${night?'':' — di giorno il cielo è chiaro: torna dopo il tramonto locale'}</span>`;
+}
 function initYT(){
+  renderStreamUI();
+  $('#ytgroups').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; ytGroup=+b.dataset.g; playStream(0); };
+  $('#ytitems').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; playStream(+b.dataset.i); };
+  ytClock=setInterval(tickClock,30000);
   window.onYouTubeIframeAPIReady = ()=>{
     ytPlayer = new YT.Player('ytplayer',{
-      videoId: STREAMS[0].id, host:'https://www.youtube-nocookie.com',
+      videoId: curStream().id, host:'https://www.youtube-nocookie.com',
       playerVars:{autoplay:1, mute:1, playsinline:1, rel:0, modestbranding:1},
       events:{
         onReady:e=>{ try{ e.target.mute(); e.target.playVideo(); }catch(_){} },
-        onError:()=>{ ytTried.add(ytIdx); const next=STREAMS.findIndex((_,k)=>!ytTried.has(k)); if(next>=0) playStream(next,true);
-                      else { $('#ytnote').innerHTML='Le dirette non sono disponibili in questo momento.<br><a class="btn" href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">Apri le dirette NASA su YouTube ↗</a>'; $('#ytnote').style.display='flex'; } }
+        onError:e=>{
+          window.ytErrors.push({id:curStream().id,code:e.data});
+          ytTried.add(ytIdx);
+          const items=STREAM_GROUPS[ytGroup].items, next=items.findIndex((_,k)=>!ytTried.has(k));
+          if(next>=0) playStream(next,true);
+          else { $('#ytnote').innerHTML='Le dirette di questa categoria non sono disponibili ora.<br>Prova un\'altra categoria qui sotto.'; $('#ytnote').style.display='flex'; }
+        }
       }
     });
   };
@@ -755,8 +799,9 @@ function initYT(){
 }
 function playStream(i,auto){
   ytIdx=i; if(!auto) ytTried.clear();
-  document.querySelectorAll('.seg[data-seg="yt"] button').forEach((b,k)=>b.classList.toggle('on',k===i));
-  if(ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(STREAMS[i].id);
+  $('#ytnote').style.display='none';
+  renderStreamUI();
+  if(ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(curStream().id);
 }
 function swapImg(sel,url){ const el=$(sel); if(el) el.src=bust(url); }
 function startLive(){
