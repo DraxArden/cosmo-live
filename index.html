@@ -189,7 +189,7 @@ body.panel-open .credits{display:none}
   <div class="controls">
     <div class="pill" title="Velocità della simulazione">
       <span>⏱</span>
-      <select id="speed">
+      <select id="speed" autocomplete="off">
         <option value="0">Pausa</option>
         <option value="0.0000115741">Tempo reale</option>
         <option value="0.0416667">1 ora/s</option>
@@ -388,8 +388,7 @@ function pos(b){
   if(b.parent){
     const p = pos(BY[b.parent]);
     const pr = BY[b.parent].r;
-    const per = Math.sign(b.P)*Math.max(Math.abs(b.P),2.2); // lune troppo veloci rallentate per leggibilità
-    const th = (b.a*37 % 6.28) + 2*Math.PI*simDays/per;
+    const th = 2*Math.PI*(ORB[b.id] ?? ((b.a*37%6.28)/(2*Math.PI) + simDays/b.P));
     const R = pr*b.a;
     return {x:p.x+R*Math.cos(th), y:p.y-R*Math.sin(th)};
   }
@@ -498,19 +497,19 @@ const PROBES=[
  {id:'hera',name:'Hera',naif:91,agency:'ESA',launch:'7 ottobre 2024',forever:true,c:'#ffa0c8',q:'Hera mission Didymos Dimorphos',n:'Hera',
   d:"Studia la coppia di asteroidi Didymos e Dimorphos, deviato nel 2022 dall'impatto della sonda DART: un test di difesa planetaria. Arrivo previsto alla fine del 2026."},
  // sonde attorno a pianeti e nei punti lagrangiani (posizione indicativa)
- {id:'juno',name:'Juno',naif:61,agency:'NASA',launch:'5 agosto 2011',host:'jupiter',mode:'orbit',k:1.45,c:'#ffd6a0',q:'Juno Jupiter',n:'Juno',
+ {id:'juno',per:33,name:'Juno',naif:61,agency:'NASA',launch:'5 agosto 2011',host:'jupiter',mode:'orbit',k:1.45,c:'#ffd6a0',q:'Juno Jupiter',n:'Juno',
   d:"In orbita polare attorno a Giove dal 2016: studia l'interno del pianeta, le aurore e, nei sorvoli, le lune Io, Europa e Ganimede."},
- {id:'bepicolombo',name:'BepiColombo',naif:121,agency:'ESA / JAXA',launch:'20 ottobre 2018',host:'mercury',mode:'orbit',k:1.7,c:'#a8d8ff',q:'BepiColombo Mercury',n:'BepiColombo',
+ {id:'bepicolombo',per:0.097,name:'BepiColombo',naif:121,agency:'ESA / JAXA',launch:'20 ottobre 2018',host:'mercury',mode:'orbit',k:1.7,c:'#a8d8ff',q:'BepiColombo Mercury',n:'BepiColombo',
   d:"Missione europeo-giapponese verso Mercurio, con due sonde che studieranno il pianeta da orbite diverse. Arrivo in orbita previsto alla fine del 2026."},
- {id:'mro',name:'Mars Reconnaissance Orbiter',naif:74,agency:'NASA',launch:'12 agosto 2005',host:'mars',mode:'orbit',k:1.28,c:'#ffc2a0',q:'Mars Reconnaissance Orbiter HiRISE',n:'Mars Reconnaissance Orbiter',
+ {id:'mro',per:0.078,name:'Mars Reconnaissance Orbiter',naif:74,agency:'NASA',launch:'12 agosto 2005',host:'mars',mode:'orbit',k:1.28,c:'#ffc2a0',q:'Mars Reconnaissance Orbiter HiRISE',n:'Mars Reconnaissance Orbiter',
   d:"In orbita attorno a Marte dal 2006, con la fotocamera HiRISE che distingue oggetti grandi come un tavolo. Fa anche da ponte radio per i rover."},
- {id:'odyssey',name:'Mars Odyssey',naif:53,agency:'NASA',launch:'7 aprile 2001',host:'mars',mode:'orbit',k:1.4,c:'#ffc2a0',q:'2001 Mars Odyssey',n:'Mars Odyssey',
+ {id:'odyssey',per:0.083,name:'Mars Odyssey',naif:53,agency:'NASA',launch:'7 aprile 2001',host:'mars',mode:'orbit',k:1.4,c:'#ffc2a0',q:'2001 Mars Odyssey',n:'Mars Odyssey',
   d:"La sonda attiva da più tempo attorno a un altro pianeta: osserva Marte dal 2001 e ha scoperto ghiaccio d'acqua sotto la superficie."},
  {id:'perseverance',name:'Perseverance',naif:168,agency:'NASA',launch:'30 luglio 2020',host:'mars',mode:'surface',lat:18.44,lon:77.45,c:'#7dffb0',q:'Perseverance rover',n:'Perseverance',
   d:"Il rover che esplora il cratere Jezero, un antico lago marziano, alla ricerca di tracce di vita passata. Raccoglie campioni di roccia per un futuro ritorno sulla Terra."},
  {id:'curiosity',name:'Curiosity',naif:76,agency:'NASA',launch:'26 novembre 2011',host:'mars',mode:'surface',lat:-4.6,lon:137.4,c:'#7dffb0',q:'Curiosity rover Gale crater',n:'Curiosity rover',
   d:"Sul cratere Gale dal 2012, sale lungo le pendici del Monte Sharp leggendo negli strati di roccia la storia del clima di Marte."},
- {id:'lro',name:'Lunar Reconnaissance Orbiter',naif:85,agency:'NASA',launch:'18 giugno 2009',host:'moon',mode:'orbit',k:1.5,c:'#e6e6e6',q:'Lunar Reconnaissance Orbiter',n:'Lunar Reconnaissance Orbiter',
+ {id:'lro',per:0.082,name:'Lunar Reconnaissance Orbiter',naif:85,agency:'NASA',launch:'18 giugno 2009',host:'moon',mode:'orbit',k:1.5,c:'#e6e6e6',q:'Lunar Reconnaissance Orbiter',n:'Lunar Reconnaissance Orbiter',
   d:"Mappa la Luna dal 2009 con un dettaglio di mezzo metro: ha fotografato anche i siti di atterraggio delle missioni Apollo."},
  {id:'jwst',name:'James Webb',naif:170,agency:'NASA / ESA / CSA',launch:'25 dicembre 2021',host:'earth',mode:'L2',c:'#ffe08a',q:'James Webb Space Telescope',n:'Webb',
   d:"Il più grande telescopio spaziale mai lanciato. Osserva nell'infrarosso dal punto lagrangiano L2, a 1,5 milioni di km dalla Terra, dalla parte opposta al Sole."},
@@ -597,7 +596,7 @@ function sphereProject(host,lat,lon,f){
 function hostScreen(id){ const h=BY[id], w=pos(h); return {h,p:w2s(w.x,w.y),rad:Math.max(1,h.r*cam.s)}; }
 function hostedPos(p){ // posizione mondo delle sonde ospitate (indicativa)
   const h=BY[p.host], hp=pos(h);
-  if(p.mode==='orbit'){ const th=(Date.now()/1000)*(2*Math.PI/(40+p.naif%17*3)) + p.naif; const R=h.r*p.k; return {x:hp.x+R*Math.cos(th), y:hp.y-R*Math.sin(th)}; }
+  if(p.mode==='orbit'){ const th=2*Math.PI*(ORB[p.id] ?? (p.naif%10)/10); const R=h.r*p.k; return {x:hp.x+R*Math.cos(th), y:hp.y-R*Math.sin(th)}; }
   if(p.mode==='L1'||p.mode==='L2'){ const l=Math.hypot(hp.x,hp.y)||1, sg=p.mode==='L2'?1:-1, R=h.r*4.2; return {x:hp.x+sg*hp.x/l*R, y:hp.y+sg*hp.y/l*R}; }
   return hp;
 }
@@ -751,7 +750,7 @@ const TILT={sun:[.12,.1],mercury:[0,0],venus:[.05,0],earth:[.41,.25],mars:[.44,.
 const SPIN={sun:25.4,mercury:58.6,venus:-4,earth:.997,mars:1.026,jupiter:.414,saturn:.444,uranus:-.718,neptune:.671,pluto:-6.39};
 const ATMO={earth:[110,170,255,.55],venus:[255,235,190,.35],mars:[255,170,130,.18],jupiter:[255,235,210,.18],saturn:[255,235,200,.18],uranus:[170,240,255,.3],neptune:[110,150,255,.35],titan:[255,190,110,.45]};
 const RING=[197,171,175,10,192,162,174,27,217,196,177,18,197,174,175,48,201,183,175,24,190,169,174,47,206,171,174,15,197,179,175,43,192,169,174,41,192,173,175,51,194,173,175,47,196,171,174,49,197,169,175,53,204,178,174,47,199,179,175,55,199,176,175,51,204,178,174,57,201,174,175,54,203,176,175,53,201,173,174,56,204,178,175,83,197,173,174,55,203,179,175,58,208,183,175,90,201,183,175,48,206,186,175,20,204,179,175,51,211,184,175,89,208,186,175,59,203,183,177,51,215,183,175,79,217,189,175,64,213,186,177,135,224,199,177,82,227,201,163,137,227,198,160,179,225,196,160,175,225,198,159,167,227,199,160,175,227,198,162,156,227,198,162,158,227,199,162,175,229,199,163,173,227,199,163,192,227,198,162,173,227,199,163,190,227,198,163,186,227,201,163,203,227,199,157,213,227,203,168,218,227,196,150,206,225,196,150,212,227,196,150,223,227,198,154,213,227,198,151,226,227,198,151,219,227,196,150,222,227,199,156,203,227,203,163,205,225,198,157,211,227,199,156,215,227,199,156,219,227,201,162,215,229,210,175,227,227,201,163,231,227,199,157,229,227,199,154,231,227,199,156,239,227,199,157,236,229,203,160,232,227,199,157,230,227,203,165,232,227,203,165,236,229,203,163,238,227,201,163,238,227,203,163,238,227,203,163,238,227,201,163,237,229,203,165,238,227,203,166,236,227,204,169,246,227,204,174,248,220,201,177,249,225,201,172,206,199,181,174,36,196,176,175,72,194,176,174,60,192,176,174,59,194,183,174,15,197,179,175,86,201,183,175,102,206,191,175,127,206,189,175,153,211,194,175,231,217,196,177,229,222,201,177,235,222,199,177,226,225,203,177,215,227,203,169,201,227,204,169,203,227,204,169,198,229,201,168,192,227,201,168,185,229,201,165,175,227,201,166,172,229,201,168,167,227,203,166,160,225,203,168,159,227,203,168,159,227,204,171,156,227,204,171,158,227,204,169,153,229,206,174,155,227,203,169,156,229,206,174,125,227,204,171,114,227,204,174,148,227,206,177,160,222,203,178,163,218,199,175,166,213,196,175,139,208,189,177,0,210,183,175,0,229,213,177,0,225,169,175,0,218,171,175,0,208,168,174,0,203,183,174,0];
-const TEX={}, SPHERES={}, LUTS=new Map(), ROT={};
+const TEX={}, SPHERES={}, LUTS=new Map(), ROT={}, ORB={};
 let texOK=true;
 function loadTexture(name){
   return new Promise(res=>{
@@ -782,6 +781,12 @@ function updateSpins(dt){
     ROT[b.id]=((ROT[b.id]??Math.random())+rate*dt)%1;
   }
   ROT.clouds=((ROT.clouds||0)+Math.min(speed/0.9,0.055)*dt)%1;
+  // lune: periodi reali; se la simulazione è veloce, tutto il sistema rallenta insieme (la luna più veloce fa al massimo un giro ogni 25 s)
+  for(const host of BODIES){ if(!host.moons) continue;
+    const pmin=Math.min(...host.moons.map(m=>Math.abs(m.P))), f=Math.min(1, 0.04*pmin/Math.max(speed,1e-9));
+    for(const m of host.moons){ const o=ORB[m.id] ?? ((m.a*37%6.28)/(2*Math.PI) + simDays/m.P); ORB[m.id]=(o + speed*f/m.P*dt)%1; } }
+  // sonde in orbita: periodi reali, al massimo un giro ogni 50 s
+  for(const p of PROBES){ if(p.mode!=='orbit') continue; const o=ORB[p.id] ?? (p.naif%10)/10; ORB[p.id]=(o+Math.min(speed/p.per,0.02)*dt)%1; }
 }
 function getLUT(D,tz,inc){
   const key=D+'|'+tz+'|'+inc; let L=LUTS.get(key); if(L) return L;
@@ -1200,7 +1205,10 @@ function renderChips(){
 }
 renderChips();
 $('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(!c) return; if(c.dataset.mode){ probeMode=c.dataset.mode==='probes'; renderChips(); $('#chips').scrollLeft=0; return; } select(c.dataset.id); });
-$('#speed').onchange=e=>speed=+e.target.value;
+{ const sv=store.get('cosmo.speed'); const sel=$('#speed');
+  if(sv!==null && [...sel.options].some(o=>o.value===sv)) sel.value=sv;
+  speed=+sel.value;
+  sel.onchange=e=>{ speed=+e.target.value; store.set('cosmo.speed',e.target.value); }; }
 $('#today').onclick=()=>{ simDays=nowDays(); };
 $('#overview').onclick=overview;
 $('#credits').onclick=showCredits;
