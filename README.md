@@ -2,23 +2,24 @@
 
 App web in un solo file (`index.html`), senza installazioni.
 
-## Come aprirla
+## Apri l'app
 
-**Modo rapido:** doppio clic su `index.html`. Funzionano mappa, notizie, foto, video NASA, posizione della ISS e immagini live di Sole e Terra.
+**👉 https://draxarden.github.io/cosmo-live/**
 
-**Modo completo (consigliato):** serve anche per vedere la diretta YouTube NASA dentro l'app (YouTube blocca i video aperti come file locale).
-Apri un terminale nella cartella dell'app e scrivi:
+Funziona da computer, tablet e telefono, con tutte le dirette.
 
-```
-python3 -m http.server 8000
-```
+### Aggiornare il sito
 
-(su Windows: `python -m http.server 8000`), poi vai su <http://localhost:8000> nel browser.
+Ogni modifica a `index.html` caricata su questo repository (ramo `main`) viene pubblicata in automatico in circa un minuto.
+
+### Usarla senza internet… quasi
+
+Puoi anche scaricare `index.html` e aprirlo con un doppio clic: funziona tutto tranne la diretta YouTube, che YouTube blocca nei file aperti dal computer.
 
 ## Collegamenti diretti
 
-- `index.html#saturn` apre direttamente su Saturno (vale per ogni corpo: `#mars`, `#europa`, `#titan`…)
-- `index.html#live` apre direttamente la sezione Live
+- `draxarden.github.io/cosmo-live/#saturn` apre direttamente su Saturno (vale per ogni corpo: `#mars`, `#europa`, `#titan`…)
+- `draxarden.github.io/cosmo-live/#live` apre direttamente la sezione Live
 
 ## Fonti dati (tutte gratuite, senza registrazione)
 
@@ -34,4 +35,3 @@ python3 -m http.server 8000
 ## Note
 
 - Le posizioni dei pianeti sono calcolate per la data reale (orbite circolari approssimate). Le distanze sono in scala logaritmica, così ci stanno tutti. Le lune più veloci sono rallentate per renderle leggibili.
-- Per pubblicarla online basta caricare `index.html` su un hosting statico qualsiasi (GitHub Pages, Netlify, Vercel).
