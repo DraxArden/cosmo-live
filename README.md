@@ -34,6 +34,8 @@ Puoi anche scaricare `index.html` e aprirlo con un doppio clic: funziona tutto t
 
 ## Note
 
+- I pianeti e le lune sono disegnati con le vere mappe di superficie (cartella `tex/`, crediti in `tex/CREDITS.md`). Se apri il file dal computer con un doppio clic, il browser non permette di leggerle e i pianeti tornano alla versione semplificata.
+
 - Le posizioni dei pianeti sono calcolate per la data reale (orbite circolari approssimate). Le distanze sono in scala logaritmica, così ci stanno tutti. Le lune più veloci sono rallentate per renderle leggibili.
 
 ## Aggiungere o cambiare una diretta
