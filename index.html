@@ -155,7 +155,7 @@ body.panel-open .credits{display:none}
 @media (max-width:720px){
   .topbar{flex-direction:column;gap:10px;padding:12px 14px}
   .controls{justify-content:flex-start}
-  #panel{top:auto;height:78vh;width:100%;border-left:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(105%)}
+  #panel{top:auto;height:60vh;width:100%;border-left:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(105%)}
   #panel.open{transform:none}
   .hint{display:none}
   .issstats{grid-template-columns:1fr 1fr}
@@ -358,8 +358,9 @@ function resize(){
 }
 function overviewScale(){ return Math.min(W,H)/2*0.9 / orbitR(39.48); }
 function panelW(){ return $('#panel').classList.contains('open') && W>720 ? 460 : 0; }
-function panelH(){ return $('#panel').classList.contains('open') && W<=720 ? H*0.78 : 0; }
-function viewCenter(){ return {x:(W-panelW())/2, y:(H-panelH())/2 + (panelH()?20:0)}; }
+function panelH(){ return $('#panel').classList.contains('open') && W<=720 ? H*0.6 : 0; }
+function topH(){ return W<=720 && panelH() ? ($('.topbar').offsetHeight||0) : 0; }
+function viewCenter(){ const t=topH(); return {x:(W-panelW())/2, y:t+(H-panelH()-t)/2}; }
 const w2s = (x,y)=>{const c=viewCenter(); return {x:(x-cam.x)*cam.s+c.x, y:(y-cam.y)*cam.s+c.y};};
 const s2w = (x,y)=>{const c=viewCenter(); return {x:(x-c.x)/cam.s+cam.x, y:(y-c.y)/cam.s+cam.y};};
 
@@ -380,9 +381,9 @@ function pos(b){
 }
 
 function focusScale(b){
-  const avail = Math.min(W-panelW(), H-panelH());
+  const avail = Math.min(W-panelW(), H-panelH()-topH());
   if(b.id==='sun') return avail*0.5/ orbitR(1.6);
-  if(b.moons){ const far = Math.max(...b.moons.map(m=>m.a))*b.r; return avail*0.42/far; }
+  if(b.moons){ let fa=Math.max(...b.moons.map(m=>m.a)); if(W<=720) fa=Math.min(fa,3.4); return avail*0.42/(fa*b.r); }
   if(b.parent) return avail*0.12/b.r;
   return avail*0.16/b.r;
 }
