@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cosmo Live — Il Sistema Solare in diretta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#05060b; --panel:#0c0f1a; --panel2:#121728; --line:#1f2740; --text:#e8ecf7; --muted:#8b93ad;
+  --accent:#ffb547; --accent2:#5fd4ff; --live:#ff3b4e; --radius:14px;
+  --head:'Space Grotesk',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--body);overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:var(--accent2)}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;pointer-events:none;z-index:5}
+.topbar>*{pointer-events:auto}
+.brand{display:flex;flex-direction:column;gap:2px}
+.brand h1{font-family:var(--head);font-weight:700;font-size:22px;letter-spacing:.02em}
+.brand h1 span{color:var(--accent)}
+.brand p{font-size:12px;color:var(--muted)}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.pill{display:flex;align-items:center;gap:8px;background:rgba(12,15,26,.78);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px}
+.pill select{background:transparent;color:var(--text);border:0;font:inherit;outline:none;cursor:pointer}
+.pill select option{background:var(--panel)}
+.pill .date{font-family:var(--head);font-variant-numeric:tabular-nums;min-width:92px;text-align:center}
+.btn{background:rgba(12,15,26,.78);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:500;transition:.2s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn-live{display:flex;align-items:center;gap:8px;border-color:rgba(255,59,78,.5);font-weight:600}
+.btn-live:hover{color:#fff;border-color:var(--live);background:rgba(255,59,78,.15)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 0 0 rgba(255,59,78,.7);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,59,78,.7)}70%{box-shadow:0 0 0 9px rgba(255,59,78,0)}100%{box-shadow:0 0 0 0 rgba(255,59,78,0)}}
+
+/* ---------- body chips ---------- */
+.chips{position:fixed;left:0;right:0;bottom:0;display:flex;gap:6px;padding:14px 22px 18px;overflow-x:auto;z-index:5;scrollbar-width:none;background:linear-gradient(transparent,rgba(5,6,11,.85))}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(12,15,26,.7);font-size:13px;white-space:nowrap;transition:.2s}
+.chip i{width:10px;height:10px;border-radius:50%}
+.chip:hover,.chip.on{border-color:var(--accent);color:var(--accent)}
+.hint{position:fixed;left:22px;bottom:68px;font-size:12px;color:var(--muted);z-index:4;pointer-events:none}
+#tip{position:fixed;pointer-events:none;background:var(--panel2);border:1px solid var(--line);padding:5px 10px;border-radius:8px;font-size:12px;font-weight:500;opacity:0;transition:opacity .15s;z-index:6}
+
+/* ---------- side panel ---------- */
+#panel{position:fixed;top:0;right:0;bottom:0;width:460px;max-width:100%;background:linear-gradient(180deg,rgba(12,15,26,.97),rgba(8,10,18,.98));border-left:1px solid var(--line);transform:translateX(105%);transition:transform .45s cubic-bezier(.2,.8,.2,1);z-index:10;display:flex;flex-direction:column}
+#panel.open{transform:none}
+.p-head{padding:22px 22px 14px;border-bottom:1px solid var(--line);position:relative}
+.p-close{position:absolute;top:16px;right:16px;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);font-size:18px;line-height:1}
+.p-close:hover{border-color:var(--accent);color:var(--accent)}
+.p-kicker{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.p-title{font-family:var(--head);font-size:34px;font-weight:700;margin:4px 0 6px}
+.p-desc{font-size:14px;line-height:1.55;color:#c3c9db}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.fact{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.fact b{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:500;margin-bottom:2px}
+.fact span{font-family:var(--head);font-size:14px}
+.moons{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.moons button{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2)}
+.moons button:hover{border-color:var(--accent2);color:var(--accent2)}
+.parent-link{font-size:12px;color:var(--accent2);margin-top:8px;display:inline-block;cursor:pointer}
+.tabs{display:flex;gap:4px;padding:12px 22px 0}
+.tab{flex:1;padding:10px 0;border-bottom:2px solid transparent;font-size:14px;font-weight:600;color:var(--muted)}
+.tab.on{color:var(--text);border-color:var(--accent)}
+.searchrow{display:flex;gap:6px;padding:12px 22px 4px;align-items:center}
+.searchrow input{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 11px;color:var(--text);font:inherit;font-size:13px;outline:none}
+.searchrow input:focus{border-color:var(--accent)}
+.searchrow label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center;white-space:nowrap;cursor:pointer}
+.p-body{flex:1;overflow-y:auto;padding:10px 22px 30px}
+.p-body::-webkit-scrollbar{width:8px}.p-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+.news{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.news:hover h4{color:var(--accent)}
+.news img{width:96px;height:72px;object-fit:cover;border-radius:8px;flex:none;background:var(--panel2)}
+.news h4{font-family:var(--head);font-size:15px;line-height:1.3;font-weight:600;transition:.2s}
+.news small{display:block;color:var(--muted);font-size:11.5px;margin-top:4px}
+.news p{font-size:12.5px;color:#aab2c8;margin-top:4px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-top:6px}
+.thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--panel2);cursor:pointer}
+.thumb img{width:100%;height:100%;object-fit:cover;transition:transform .4s}
+.thumb:hover img{transform:scale(1.07)}
+.vgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:6px}
+.vcard{cursor:pointer}
+.vcard .thumb{aspect-ratio:16/10}
+.vcard .thumb::after{content:'▶';position:absolute;inset:0;display:grid;place-items:center;font-size:26px;color:#fff;background:rgba(0,0,0,.25);text-shadow:0 2px 10px #000}
+.vcard h5{font-size:12.5px;font-weight:500;margin-top:6px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.more{display:block;margin:16px auto 0;padding:9px 18px}
+.state{color:var(--muted);font-size:13px;padding:24px 0;text-align:center}
+.spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;margin:30px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.src{font-size:11px;color:var(--muted);padding-top:14px}
+
+/* ---------- lightbox ---------- */
+#lb{position:fixed;inset:0;background:rgba(2,3,8,.94);z-index:30;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px}
+#lb.open{display:flex}
+#lb .media{max-width:min(1200px,100%);max-height:72vh;display:flex;justify-content:center}
+#lb img,#lb video{max-width:100%;max-height:72vh;border-radius:10px}
+#lb .cap{max-width:900px;margin-top:16px;text-align:left;width:100%}
+#lb .cap h3{font-family:var(--head);font-size:19px}
+#lb .cap small{color:var(--muted)}
+#lb .cap p{font-size:13px;color:#b8bfd3;margin-top:6px;line-height:1.5;max-height:16vh;overflow:auto}
+#lb .x{position:absolute;top:18px;right:22px;font-size:28px}
+
+/* ---------- live overlay ---------- */
+#live{position:fixed;inset:0;background:var(--bg);z-index:20;display:none;overflow-y:auto}
+#live.open{display:block}
+.live-wrap{max-width:1320px;margin:0 auto;padding:26px 24px 60px}
+.live-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}
+.live-head h2{font-family:var(--head);font-size:30px;display:flex;align-items:center;gap:12px}
+.live-head p{color:var(--muted);font-size:14px;margin-top:4px;max-width:720px}
+.lgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column}
+.card .ch{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);gap:10px}
+.card .ch h3{font-family:var(--head);font-size:15px;font-weight:600}
+.card .ch small{color:var(--muted);font-size:11.5px}
+.tag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:3px 7px;border-radius:5px;background:rgba(255,59,78,.15);color:#ff8a96;font-weight:600;white-space:nowrap}
+.tag.near{background:rgba(95,212,255,.12);color:var(--accent2)}
+.card .cb{position:relative;flex:1;background:#000;min-height:200px;display:flex;align-items:center;justify-content:center}
+.card .cb img{width:100%;height:100%;object-fit:contain;display:block}
+.card .cf{padding:10px 14px;font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.seg{display:flex;gap:4px;flex-wrap:wrap}
+.seg button{font-size:11.5px;padding:4px 9px;border-radius:6px;border:1px solid var(--line)}
+.seg button.on{border-color:var(--accent);color:var(--accent)}
+.c8{grid-column:span 8}.c4{grid-column:span 4}.c6{grid-column:span 6}.c12{grid-column:span 12}
+.yt{position:relative;width:100%;aspect-ratio:16/9;background:#000}
+.yt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.yt .note{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:30px;font-size:13px;color:var(--muted)}
+.issstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 14px}
+.issstats div{background:var(--panel2);border-radius:8px;padding:8px 10px}
+.issstats b{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-weight:500}
+.issstats span{font-family:var(--head);font-size:16px;font-variant-numeric:tabular-nums}
+.links{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;padding:14px}
+.links a{display:block;padding:12px 14px;border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--text);background:var(--panel2);transition:.2s}
+.links a:hover{border-color:var(--accent)}
+.links a b{display:block;font-family:var(--head);font-size:14px}
+.links a small{color:var(--muted);font-size:12px}
+.err{color:#ff8a96;font-size:12.5px;padding:20px;text-align:center}
+
+.controls,.chips{transition:margin .45s cubic-bezier(.2,.8,.2,1),right .45s cubic-bezier(.2,.8,.2,1)}
+@media (min-width:721px){ body.panel-open .controls{margin-right:460px} body.panel-open .chips{right:460px} }
+@media (max-width:980px){.c8,.c4,.c6{grid-column:span 12}}
+@media (max-width:720px){
+  .topbar{flex-direction:column;gap:10px;padding:12px 14px}
+  .controls{justify-content:flex-start}
+  #panel{top:auto;height:78vh;width:100%;border-left:0;border-top:1px solid var(--line);border-radius:18px 18px 0 0;transform:translateY(105%)}
+  #panel.open{transform:none}
+  .hint{display:none}
+  .issstats{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>Cosmo<span>Live</span></h1>
+    <p>Il Sistema Solare, con immagini e dirette dallo spazio</p>
+  </div>
+  <div class="controls">
+    <div class="pill" title="Velocità della simulazione">
+      <span>⏱</span>
+      <select id="speed">
+        <option value="0">Pausa</option>
+        <option value="0.0000115741">Tempo reale</option>
+        <option value="0.0416667">1 ora/s</option>
+        <option value="1" selected>1 giorno/s</option>
+        <option value="7">1 settimana/s</option>
+        <option value="30">1 mese/s</option>
+      </select>
+      <span class="date" id="simdate">—</span>
+    </div>
+    <button class="btn" id="today">Oggi</button>
+    <button class="btn" id="overview">Vista d'insieme</button>
+    <button class="btn btn-live" id="openLive"><span class="dot"></span>LIVE dallo spazio</button>
+  </div>
+</header>
+
+<div class="hint">Clicca un pianeta per zoomare · trascina per spostarti · rotella o pizzico per lo zoom</div>
+<nav class="chips" id="chips"></nav>
+<div id="tip"></div>
+
+<aside id="panel" aria-live="polite">
+  <div class="p-head">
+    <button class="p-close" id="pclose" aria-label="Chiudi">×</button>
+    <div class="p-kicker" id="pkicker"></div>
+    <div class="p-title" id="ptitle"></div>
+    <p class="p-desc" id="pdesc"></p>
+    <div class="facts" id="pfacts"></div>
+    <div class="moons" id="pmoons"></div>
+    <a class="parent-link" id="pparent"></a>
+  </div>
+  <div class="tabs">
+    <button class="tab on" data-tab="news">Notizie</button>
+    <button class="tab" data-tab="photos">Foto</button>
+    <button class="tab" data-tab="videos">Video</button>
+  </div>
+  <form class="searchrow" id="sform">
+    <input id="sinput" placeholder="Affina la ricerca (in inglese)…" autocomplete="off">
+    <label><input type="checkbox" id="recent"> dal 2020</label>
+  </form>
+  <div class="p-body" id="pbody"></div>
+</aside>
+
+<div id="lb"><button class="x" id="lbx" aria-label="Chiudi">×</button><div class="media" id="lbmedia"></div><div class="cap" id="lbcap"></div></div>
+
+<section id="live">
+  <div class="live-wrap">
+    <div class="live-head">
+      <div>
+        <h2><span class="dot"></span>Live dallo spazio</h2>
+        <p>Dirette video, posizione della Stazione Spaziale in tempo reale e le ultime immagini scattate da satelliti e osservatori solari, aggiornate in automatico.</p>
+      </div>
+      <button class="btn" id="closeLive">← Torna alla mappa</button>
+    </div>
+    <div class="lgrid" id="lgrid"></div>
+  </div>
+</section>
+
+<script>
+/* =========================================================
+   DATI DEI CORPI CELESTI
+   L0 = longitudine media al J2000 (gradi), P = periodo (giorni)
+   a  = semiasse in UA (pianeti) / multipli del raggio del pianeta (lune, solo grafica)
+   r  = raggio grafico, q = termine per foto/video NASA, n = termine per le notizie
+   ========================================================= */
+const BODIES = [
+ {id:'sun',name:'Sole',kind:'Stella',r:24,c:['#fff6c8','#ffc23d','#ff7a00'],q:'Sun solar',n:'Sun',
+  d:"La stella al centro del nostro sistema: una sfera di plasma che contiene il 99,8% della massa del Sistema Solare. Osservata 24 ore su 24 da SDO, SOHO e Parker Solar Probe.",
+  f:[['Diametro','1.392.700 km'],['Età','~4,6 miliardi di anni'],['Temp. superficie','~5.500 °C'],['Rotazione','~25 giorni']]},
+ {id:'mercury',name:'Mercurio',kind:'Pianeta roccioso',L0:252.25,P:87.969,a:.387,r:4,c:['#d9d2c8','#9b9188','#5d5650'],q:'Mercury planet MESSENGER',n:'BepiColombo',
+  d:"Il pianeta più piccolo e più vicino al Sole. Senza atmosfera significativa, passa da 430 °C di giorno a −180 °C di notte. La missione BepiColombo (ESA/JAXA) è in arrivo.",
+  f:[['Diametro','4.879 km'],['Distanza dal Sole','0,39 UA'],['Anno','88 giorni'],['Giorno solare','176 giorni']]},
+ {id:'venus',name:'Venere',kind:'Pianeta roccioso',L0:181.98,P:224.70,a:.723,r:6.5,c:['#fff1c9','#e3b96b','#9c6b2f'],q:'Venus planet',n:'Venus',
+  d:"Il pianeta più caldo, avvolto da nuvole di acido solforico e da un'atmosfera di CO₂ con pressione 90 volte quella terrestre. Ruota al contrario rispetto agli altri pianeti.",
+  f:[['Diametro','12.104 km'],['Distanza dal Sole','0,72 UA'],['Anno','225 giorni'],['Temp. media','464 °C']]},
+ {id:'earth',name:'Terra',kind:'Pianeta roccioso',L0:100.46,P:365.256,a:1,r:7,c:['#bfe6ff','#2f7fd6','#0b3a7a'],q:'Earth from space',n:'Earth observation',
+  d:"Casa nostra, l'unico mondo conosciuto con la vita. Osservata ogni minuto da centinaia di satelliti e dalla Stazione Spaziale Internazionale, che la sorvola a 400 km.",
+  f:[['Diametro','12.742 km'],['Distanza dal Sole','1 UA'],['Anno','365,25 giorni'],['Lune','1']]},
+ {id:'mars',name:'Marte',kind:'Pianeta roccioso',L0:355.45,P:686.98,a:1.524,r:5,c:['#ffb08a','#d0532b','#6e2412'],q:'Mars surface rover',n:'Mars',
+  d:"Il pianeta rosso, con il vulcano più alto del Sistema Solare (Olympus Mons) e antichi letti di fiumi. Esplorato dai rover Perseverance e Curiosity.",
+  f:[['Diametro','6.779 km'],['Distanza dal Sole','1,52 UA'],['Anno','687 giorni'],['Giorno','24 h 37 min']]},
+ {id:'jupiter',name:'Giove',kind:'Gigante gassoso',L0:34.40,P:4332.59,a:5.203,r:15,c:['#f6e2c4','#c99a6b','#7a5235'],q:'Jupiter Juno',n:'Jupiter',bands:true,
+  d:"Il gigante del Sistema Solare: più del doppio della massa di tutti gli altri pianeti insieme. La Grande Macchia Rossa è una tempesta più grande della Terra.",
+  f:[['Diametro','139.820 km'],['Distanza dal Sole','5,2 UA'],['Anno','11,9 anni'],['Giorno','9 h 56 min']]},
+ {id:'saturn',name:'Saturno',kind:'Gigante gassoso',L0:49.94,P:10759.22,a:9.537,r:13,c:['#fff0cc','#d9bb7e','#8a6c3a'],q:'Saturn Cassini',n:'Saturn',rings:true,
+  d:"Il signore degli anelli: un sistema di anelli di ghiaccio e roccia largo 280.000 km ma spesso in media solo una decina di metri. Ha più di 140 lune conosciute.",
+  f:[['Diametro','116.460 km'],['Distanza dal Sole','9,5 UA'],['Anno','29,4 anni'],['Giorno','10 h 33 min']]},
+ {id:'uranus',name:'Urano',kind:'Gigante ghiacciato',L0:313.23,P:30688.5,a:19.19,r:10,c:['#dcfbff','#86d6e0','#3b8b98'],q:'Uranus planet',n:'Uranus',
+  d:"Un gigante di ghiacci che ruota 'coricato su un fianco', con l'asse inclinato di 98°. Visitato una sola volta, dalla Voyager 2 nel 1986; oggi osservato da Webb.",
+  f:[['Diametro','50.724 km'],['Distanza dal Sole','19,2 UA'],['Anno','84 anni'],['Giorno','17 h 14 min']]},
+ {id:'neptune',name:'Nettuno',kind:'Gigante ghiacciato',L0:304.88,P:60182,a:30.07,r:10,c:['#b6ccff','#3d63e0','#172e85'],q:'Neptune planet',n:'Neptune',
+  d:"Il pianeta più lontano, con i venti più veloci del Sistema Solare (oltre 2.000 km/h). Fu scoperto nel 1846 grazie ai calcoli matematici prima ancora di essere visto.",
+  f:[['Diametro','49.244 km'],['Distanza dal Sole','30,1 UA'],['Anno','165 anni'],['Giorno','16 h 6 min']]},
+ {id:'pluto',name:'Plutone',kind:'Pianeta nano',L0:238.93,P:90560,a:39.48,r:3,c:['#f5e3cf','#c9a27e','#6e5440'],q:'Pluto New Horizons',n:'Pluto',
+  d:"Pianeta nano della Fascia di Kuiper, famoso per il suo 'cuore' di ghiaccio di azoto fotografato da New Horizons nel 2015.",
+  f:[['Diametro','2.377 km'],['Distanza dal Sole','39,5 UA'],['Anno','248 anni'],['Lune','5']]},
+ // ---- lune ----
+ {id:'moon',name:'Luna',kind:'Satellite naturale',parent:'earth',a:3.2,P:27.32,r:2,c:['#f4f4f4','#a9a9a9','#555'],q:'Moon lunar surface',n:'Moon',
+  d:"L'unico satellite della Terra e l'unico altro mondo calpestato dall'uomo. Con il programma Artemis gli astronauti stanno tornando in orbita lunare e poi sulla superficie.",
+  f:[['Diametro','3.474 km'],['Distanza','384.400 km'],['Orbita','27,3 giorni'],['Gravità','1/6 della Terra']]},
+ {id:'phobos',name:'Phobos',kind:'Luna di Marte',parent:'mars',a:1.9,P:.319,r:.9,c:['#c9b9a8','#7d6e60','#3e352d'],q:'Phobos moon Mars',n:'Phobos',
+  d:"La luna più grande di Marte, un corpo irregolare destinato a schiantarsi sul pianeta tra circa 50 milioni di anni. Obiettivo della missione giapponese MMX.",
+  f:[['Dimensioni','27 × 22 × 18 km'],['Orbita','7 h 39 min'],['Distanza da Marte','9.376 km'],['Scoperta','1877']]},
+ {id:'deimos',name:'Deimos',kind:'Luna di Marte',parent:'mars',a:2.9,P:1.263,r:.7,c:['#d6c8b8','#8b7b6b','#463c32'],q:'Deimos moon',n:'Deimos',
+  d:"La più piccola delle due lune di Marte, probabilmente un asteroide catturato. Dalla superficie marziana appare come una stella brillante.",
+  f:[['Dimensioni','15 × 12 × 11 km'],['Orbita','30,3 ore'],['Distanza da Marte','23.460 km'],['Scoperta','1877']]},
+ {id:'io',name:'Io',kind:'Luna di Giove',parent:'jupiter',a:2.0,P:1.769,r:1.6,c:['#fff7a3','#e2c13b','#8a6b14'],q:'Io Jupiter moon volcano',n:'Io Jupiter',
+  d:"Il corpo più vulcanicamente attivo del Sistema Solare, con oltre 400 vulcani attivi alimentati dalle maree gravitazionali di Giove.",
+  f:[['Diametro','3.643 km'],['Orbita','1,77 giorni'],['Scoperta','Galileo, 1610'],['Vulcani attivi','400+']]},
+ {id:'europa',name:'Europa',kind:'Luna di Giove',parent:'jupiter',a:2.6,P:3.551,r:1.4,c:['#fbf3e6','#cdb69b','#7a6650'],q:'Europa moon Jupiter',n:'Europa Clipper',
+  d:"Sotto la sua crosta di ghiaccio si nasconde un oceano di acqua salata: uno dei luoghi più promettenti per cercare vita. La sonda Europa Clipper è in viaggio.",
+  f:[['Diametro','3.122 km'],['Orbita','3,55 giorni'],['Oceano','~100 km di profondità'],['Scoperta','Galileo, 1610']]},
+ {id:'ganymede',name:'Ganimede',kind:'Luna di Giove',parent:'jupiter',a:3.4,P:7.155,r:2.1,c:['#e8e0d4','#9c8f7e','#4f463c'],q:'Ganymede moon',n:'Ganymede',
+  d:"La luna più grande del Sistema Solare, più grande di Mercurio, e l'unica con un proprio campo magnetico. Meta della missione europea JUICE.",
+  f:[['Diametro','5.268 km'],['Orbita','7,15 giorni'],['Campo magnetico','Sì'],['Scoperta','Galileo, 1610']]},
+ {id:'callisto',name:'Callisto',kind:'Luna di Giove',parent:'jupiter',a:4.4,P:16.689,r:2,c:['#b9ae9f','#6e6356','#2f2a24'],q:'Callisto moon',n:'Callisto',
+  d:"La superficie più craterizzata del Sistema Solare: un mondo antico e quasi immutato da 4 miliardi di anni.",
+  f:[['Diametro','4.821 km'],['Orbita','16,7 giorni'],['Età superficie','~4 mld anni'],['Scoperta','Galileo, 1610']]},
+ {id:'mimas',name:'Mimas',kind:'Luna di Saturno',parent:'saturn',a:2.6,P:.942,r:.8,c:['#f0f0f0','#b5b5b5','#606060'],q:'Mimas moon Saturn',n:'Mimas',
+  d:"Riconoscibile per l'enorme cratere Herschel, che la fa somigliare alla Morte Nera. Potrebbe nascondere un giovane oceano interno.",
+  f:[['Diametro','396 km'],['Orbita','22,6 ore'],['Cratere Herschel','130 km'],['Scoperta','1789']]},
+ {id:'enceladus',name:'Encelado',kind:'Luna di Saturno',parent:'saturn',a:2.95,P:1.370,r:.9,c:['#ffffff','#dfe9f2','#8fa6b8'],q:'Enceladus',n:'Enceladus',
+  d:"Una palla di ghiaccio bianchissima che spruzza nello spazio geyser d'acqua dal suo oceano sotterraneo, ricchi di molecole organiche.",
+  f:[['Diametro','504 km'],['Orbita','1,37 giorni'],['Geyser','Polo sud'],['Scoperta','1789']]},
+ {id:'dione',name:'Dione',kind:'Luna di Saturno',parent:'saturn',a:3.35,P:2.737,r:1.1,c:['#f2f2f2','#b8b8b8','#666'],q:'Dione moon Saturn',n:'Dione',
+  d:"Luna ghiacciata solcata da lunghe scogliere luminose, segno di un'attività tettonica passata.",
+  f:[['Diametro','1.123 km'],['Orbita','2,74 giorni'],['Composizione','Ghiaccio e roccia'],['Scoperta','1684']]},
+ {id:'rhea',name:'Rea',kind:'Luna di Saturno',parent:'saturn',a:3.85,P:4.518,r:1.3,c:['#eeeeee','#aaaaaa','#5a5a5a'],q:'Rhea moon Saturn',n:'Rhea moon',
+  d:"La seconda luna più grande di Saturno, un mondo gelido e craterizzato con una tenue atmosfera di ossigeno.",
+  f:[['Diametro','1.527 km'],['Orbita','4,5 giorni'],['Atmosfera','Tenue, O₂ e CO₂'],['Scoperta','1672']]},
+ {id:'titan',name:'Titano',kind:'Luna di Saturno',parent:'saturn',a:4.9,P:15.945,r:2.1,c:['#ffe2a8','#d69a3e','#7a4f15'],q:'Titan moon Saturn',n:'Titan Saturn',
+  d:"L'unica luna con un'atmosfera densa, con laghi e fiumi di metano liquido. Il drone Dragonfly della NASA la esplorerà volando.",
+  f:[['Diametro','5.150 km'],['Orbita','15,9 giorni'],['Atmosfera','1,5 bar, azoto'],['Scoperta','Huygens, 1655']]},
+ {id:'iapetus',name:'Giapeto',kind:'Luna di Saturno',parent:'saturn',a:6.3,P:79.32,r:1.2,c:['#e9e2d6','#8a7a62','#2b241a'],q:'Iapetus moon',n:'Iapetus',
+  d:"La luna 'a due facce': un emisfero scuro come il carbone e l'altro bianco come la neve, con una strana cresta lungo l'equatore.",
+  f:[['Diametro','1.469 km'],['Orbita','79 giorni'],['Cresta equatoriale','~20 km'],['Scoperta','Cassini, 1671']]},
+ {id:'miranda',name:'Miranda',kind:'Luna di Urano',parent:'uranus',a:1.9,P:1.413,r:.8,c:['#e6e6e6','#a2a2a2','#555'],q:'Miranda moon Uranus',n:'Miranda moon',
+  d:"Una luna dall'aspetto 'rattoppato', con la scarpata più alta del Sistema Solare: Verona Rupes, alta circa 20 km.",
+  f:[['Diametro','472 km'],['Orbita','1,4 giorni'],['Verona Rupes','~20 km'],['Scoperta','1948']]},
+ {id:'ariel',name:'Ariel',kind:'Luna di Urano',parent:'uranus',a:2.4,P:2.520,r:1.1,c:['#eaeaea','#a9a9a9','#585858'],q:'Ariel moon Uranus',n:'Ariel Uranus',
+  d:"La luna più luminosa di Urano, con una superficie relativamente giovane attraversata da canyon.",
+  f:[['Diametro','1.158 km'],['Orbita','2,5 giorni'],['Superficie','Giovane, canyon'],['Scoperta','1851']]},
+ {id:'umbriel',name:'Umbriel',kind:'Luna di Urano',parent:'uranus',a:2.9,P:4.144,r:1.1,c:['#9a9a9a','#5e5e5e','#2a2a2a'],q:'Umbriel moon',n:'Umbriel',
+  d:"La più scura delle grandi lune di Urano, antica e fittamente craterizzata.",
+  f:[['Diametro','1.169 km'],['Orbita','4,1 giorni'],['Albedo','Molto bassa'],['Scoperta','1851']]},
+ {id:'titania',name:'Titania',kind:'Luna di Urano',parent:'uranus',a:3.6,P:8.706,r:1.4,c:['#e0dcd6','#9c958b','#4d4842'],q:'Titania moon Uranus',n:'Titania',
+  d:"La luna più grande di Urano, con enormi faglie e canyon che suggeriscono un passato geologicamente attivo.",
+  f:[['Diametro','1.577 km'],['Orbita','8,7 giorni'],['Scoperta','Herschel, 1787'],['Canyon','fino a 1.500 km']]},
+ {id:'oberon',name:'Oberon',kind:'Luna di Urano',parent:'uranus',a:4.3,P:13.46,r:1.4,c:['#d6cfc7','#8f857a','#423c36'],q:'Oberon moon',n:'Oberon',
+  d:"La luna più esterna tra le maggiori di Urano, ricoperta di crateri antichi con fondi scuri.",
+  f:[['Diametro','1.523 km'],['Orbita','13,5 giorni'],['Scoperta','Herschel, 1787'],['Superficie','Antica']]},
+ {id:'triton',name:'Tritone',kind:'Luna di Nettuno',parent:'neptune',a:2.7,P:-5.877,r:1.5,c:['#fff0ef','#d9b5b0','#7d5f5b'],q:'Triton Neptune',n:'Triton',
+  d:"Orbita al contrario rispetto alla rotazione di Nettuno: probabilmente è un oggetto della Fascia di Kuiper catturato. Ha geyser di azoto.",
+  f:[['Diametro','2.707 km'],['Orbita','5,9 giorni (retrograda)'],['Temp.','−235 °C'],['Scoperta','1846']]},
+ {id:'charon',name:'Caronte',kind:'Luna di Plutone',parent:'pluto',a:3.6,P:6.387,r:1.6,c:['#d9d4cf','#8f8781','#3f3a36'],q:'Charon Pluto',n:'Charon',
+  d:"Così grande rispetto a Plutone che i due orbitano attorno a un punto nello spazio tra loro: un sistema quasi 'doppio'.",
+  f:[['Diametro','1.212 km'],['Orbita','6,4 giorni'],['Calotta polare','Mordor Macula'],['Scoperta','1978']]}
+];
+const BY = Object.fromEntries(BODIES.map(b=>[b.id,b]));
+BODIES.forEach(b=>{ if(b.parent){ (BY[b.parent].moons ||= []).push(b); } });
+
+/* ========== utility ========== */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const stripHtml = s=>{const d=document.createElement('div');d.innerHTML=s||'';return d.textContent||'';};
+const fmtDate = s=>{try{return new Date(s).toLocaleDateString('it-IT',{day:'numeric',month:'short',year:'numeric'})}catch(e){return ''}};
+const J2000 = Date.UTC(2000,0,1,12);
+const nowDays = ()=> (Date.now()-J2000)/864e5;
+const orbitR = a => 60 + 185*Math.log2(1+a);   // scala logaritmica per far stare tutto
+
+/* ========== canvas e camera ========== */
+const cv = $('#sky'), ctx = cv.getContext('2d');
+let W=0,H=0,DPR=1;
+const cam = {x:0,y:0,s:1}, tgt = {x:0,y:0,s:1};
+let follow = null, selected = null, simDays = nowDays(), speed = 1;
+const stars = [];
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1,2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W*DPR; cv.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(!stars.length) for(let i=0;i<700;i++) stars.push({x:Math.random(),y:Math.random(),m:Math.random(),t:Math.random()*6});
+}
+function overviewScale(){ return Math.min(W,H)/2*0.9 / orbitR(39.48); }
+function panelW(){ return $('#panel').classList.contains('open') && W>720 ? 460 : 0; }
+function panelH(){ return $('#panel').classList.contains('open') && W<=720 ? H*0.78 : 0; }
+function viewCenter(){ return {x:(W-panelW())/2, y:(H-panelH())/2 + (panelH()?20:0)}; }
+const w2s = (x,y)=>{const c=viewCenter(); return {x:(x-cam.x)*cam.s+c.x, y:(y-cam.y)*cam.s+c.y};};
+const s2w = (x,y)=>{const c=viewCenter(); return {x:(x-c.x)/cam.s+cam.x, y:(y-c.y)/cam.s+cam.y};};
+
+/* posizione dei corpi in coordinate mondo */
+function pos(b){
+  if(b.id==='sun') return {x:0,y:0};
+  if(b.parent){
+    const p = pos(BY[b.parent]);
+    const pr = BY[b.parent].r;
+    const per = Math.sign(b.P)*Math.max(Math.abs(b.P),2.2); // lune troppo veloci rallentate per leggibilità
+    const th = (b.a*37 % 6.28) + 2*Math.PI*simDays/per;
+    const R = pr*b.a;
+    return {x:p.x+R*Math.cos(th), y:p.y-R*Math.sin(th)};
+  }
+  const th = (b.L0 + 360/b.P*simDays)*Math.PI/180;
+  const R = orbitR(b.a);
+  return {x:R*Math.cos(th), y:-R*Math.sin(th)};
+}
+
+function focusScale(b){
+  const avail = Math.min(W-panelW(), H-panelH());
+  if(b.id==='sun') return avail*0.5/ orbitR(1.6);
+  if(b.moons){ const far = Math.max(...b.moons.map(m=>m.a))*b.r; return avail*0.42/far; }
+  if(b.parent) return avail*0.12/b.r;
+  return avail*0.16/b.r;
+}
+
+/* ========== disegno ========== */
+function drawBody(b,p,rad,t){
+  const g = ctx.createRadialGradient(p.x-rad*.35,p.y-rad*.35,rad*.1,p.x,p.y,rad);
+  g.addColorStop(0,b.c[0]); g.addColorStop(.55,b.c[1]); g.addColorStop(1,b.c[2]);
+  if(b.id==='sun'){
+    const glow = ctx.createRadialGradient(p.x,p.y,rad*.5,p.x,p.y,rad*4);
+    glow.addColorStop(0,'rgba(255,190,60,.55)'); glow.addColorStop(.4,'rgba(255,120,0,.12)'); glow.addColorStop(1,'rgba(255,100,0,0)');
+    ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(p.x,p.y,rad*4,0,7); ctx.fill();
+  }
+  if(b.rings && rad>2){ drawRings(p,rad,true); }
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.fill();
+  if(b.bands && rad>6){
+    ctx.save(); ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.clip();
+    ctx.globalAlpha=.22;
+    [[-.55,.08,'#7a4a2a'],[-.25,.12,'#fff2dc'],[.05,.1,'#8a5a36'],[.35,.09,'#f5e0c0'],[.6,.07,'#6e4228']].forEach(([y,h,c])=>{ctx.fillStyle=c;ctx.fillRect(p.x-rad,p.y+y*rad,rad*2,h*rad*2);});
+    ctx.globalAlpha=.5; ctx.fillStyle='#c0462a'; ctx.beginPath(); ctx.ellipse(p.x+rad*.3,p.y+rad*.32,rad*.17,rad*.09,0,0,7); ctx.fill();
+    ctx.restore();
+  }
+  if(b.id==='earth' && rad>6){
+    ctx.save(); ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.clip(); ctx.globalAlpha=.55; ctx.fillStyle='#3f9a52';
+    const o = (t*0.02)%(rad*4);
+    [[-.3,-.2,.35,.25],[.25,.15,.3,.35],[-.1,.45,.2,.15],[.5,-.4,.2,.18]].forEach(([x,y,w,h])=>{ctx.beginPath();ctx.ellipse(p.x+((x*rad+o)%(rad*2)-rad*.0),p.y+y*rad,w*rad,h*rad,0.4,0,7);ctx.fill();});
+    ctx.restore();
+  }
+  // ombra lato notte
+  if(b.id!=='sun' && rad>3){
+    const sun = w2s(0,0); const ang = Math.atan2(p.y-sun.y,p.x-sun.x);
+    const sh = ctx.createLinearGradient(p.x-Math.cos(ang)*rad,p.y-Math.sin(ang)*rad,p.x+Math.cos(ang)*rad,p.y+Math.sin(ang)*rad);
+    sh.addColorStop(0,'rgba(0,0,0,0)'); sh.addColorStop(.55,'rgba(0,0,0,.15)'); sh.addColorStop(1,'rgba(0,0,0,.78)');
+    ctx.fillStyle=sh; ctx.beginPath(); ctx.arc(p.x,p.y,rad,0,7); ctx.fill();
+  }
+  if(b.rings && rad>2){ drawRings(p,rad,false); }
+}
+function drawRings(p,rad,back){
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(-.35);
+  ctx.beginPath();
+  if(back){ ctx.rect(-rad*3,-rad*3,rad*6,rad*3); } else { ctx.rect(-rad*3,0,rad*6,rad*3); }
+  ctx.clip();
+  [[1.35,1.6,'rgba(205,180,130,.35)'],[1.62,1.95,'rgba(230,210,165,.7)'],[2.0,2.25,'rgba(200,175,130,.5)']].forEach(([a,b2,c])=>{
+    ctx.strokeStyle=c; ctx.lineWidth=(b2-a)*rad; ctx.beginPath(); ctx.ellipse(0,0,(a+b2)/2*rad,(a+b2)/2*rad*.32,0,0,7); ctx.stroke();
+  });
+  ctx.restore();
+}
+
+let hover=null;
+function frame(t){
+  const dt = Math.min(0.05,(t-(frame.last||t))/1000); frame.last=t;
+  simDays += speed*dt;
+  // segui il corpo selezionato
+  if(follow){
+    const p=pos(BY[follow]);
+    if(frame.fp && frame.fid===follow){ cam.x+=p.x-frame.fp.x; cam.y+=p.y-frame.fp.y; } // la camera si muove insieme al corpo
+    frame.fp=p; frame.fid=follow; tgt.x=p.x; tgt.y=p.y;
+  } else frame.fid=null;
+  const k = 1-Math.pow(0.0025,dt);
+  cam.x += (tgt.x-cam.x)*k; cam.y += (tgt.y-cam.y)*k;
+  cam.s = Math.exp(Math.log(cam.s)+(Math.log(tgt.s)-Math.log(cam.s))*k);
+
+  ctx.fillStyle='#05060b'; ctx.fillRect(0,0,W,H);
+  // stelle con leggero parallasse
+  for(const s of stars){
+    const x = ((s.x*W - cam.x*0.02*s.m)%W+W)%W, y=((s.y*H - cam.y*0.02*s.m)%H+H)%H;
+    const a = .25+.55*s.m*(0.75+0.25*Math.sin(t/900+s.t));
+    ctx.fillStyle=`rgba(220,228,255,${a})`; ctx.fillRect(x,y,s.m>.92?1.8:1,s.m>.92?1.8:1);
+  }
+  // orbite
+  ctx.lineWidth=1;
+  for(const b of BODIES){
+    if(!b.L0) continue;
+    const c=w2s(0,0), R=orbitR(b.a)*cam.s;
+    ctx.strokeStyle = (selected===b.id||hover===b.id)?'rgba(255,181,71,.55)':'rgba(140,160,210,.16)';
+    ctx.beginPath(); ctx.arc(c.x,c.y,R,0,7); ctx.stroke();
+  }
+  // fascia degli asteroidi
+  { const c=w2s(0,0); ctx.save(); ctx.globalAlpha=.25; ctx.fillStyle='#8d8a80';
+    for(let i=0;i<420;i++){ const a=i*2.399+simDays*0.0009*(1+(i%7)/20), rr=orbitR(2.2+((i*37)%100)/100*1.1)*cam.s; ctx.fillRect(c.x+rr*Math.cos(a),c.y-rr*Math.sin(a),1.2,1.2);} ctx.restore(); }
+
+  const drawn=[];
+  for(const b of BODIES){
+    if(b.parent) continue;
+    const wp=pos(b), p=w2s(wp.x,wp.y), rad=Math.max(b.id==='sun'?6:2.5,b.r*cam.s);
+    if(p.x<-rad*5||p.x>W+rad*5||p.y<-rad*5||p.y>H+rad*5){ drawn.push({b,p,rad,hit:0}); continue; }
+    // lune: orbite e corpi, solo se il pianeta è abbastanza grande sullo schermo
+    if(b.moons && rad>9){
+      for(const m of b.moons){
+        ctx.strokeStyle=(selected===m.id||hover===m.id)?'rgba(95,212,255,.6)':'rgba(140,170,220,.18)';
+        ctx.beginPath(); ctx.arc(p.x,p.y,m.a*b.r*cam.s,0,7); ctx.stroke();
+      }
+    }
+    drawBody(b,p,rad,t);
+    drawn.push({b,p,rad,hit:Math.max(rad,11)});
+    if(b.moons && rad>9){
+      for(const m of b.moons){
+        const mw=pos(m), mp=w2s(mw.x,mw.y), mr=Math.max(1.8,m.r*cam.s);
+        drawBody(m,mp,mr,t);
+        drawn.push({b:m,p:mp,rad:mr,hit:Math.max(mr,9)});
+        if(rad>40){ label(m.name,mp.x,mp.y+mr+13,selected===m.id||hover===m.id,true); }
+      }
+    }
+    label(b.name,p.x,p.y+rad+15,selected===b.id||hover===b.id,false);
+  }
+  frame.drawn=drawn;
+  $('#simdate').textContent = new Date(J2000+simDays*864e5).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'numeric'});
+  requestAnimationFrame(frame);
+}
+function label(txt,x,y,hi,small){
+  ctx.font = `${hi?600:500} ${small?11:12.5}px Inter, sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillStyle = hi?'#ffb547':(small?'rgba(170,200,240,.8)':'rgba(220,226,245,.85)');
+  ctx.fillText(txt,x,y);
+}
+
+/* ========== interazione ========== */
+function pick(x,y){
+  const d=frame.drawn||[]; let best=null,bd=1e9;
+  // le lune hanno priorità (sono disegnate dopo)
+  for(let i=d.length-1;i>=0;i--){ const o=d[i]; if(!o.hit) continue; const dd=Math.hypot(o.p.x-x,o.p.y-y); if(dd<=o.hit && dd<bd){best=o.b;bd=dd;} }
+  return best;
+}
+const pointers=new Map(); let drag=null, pinch=null;
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId); pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1) drag={x:e.clientX,y:e.clientY,cx:tgt.x,cy:tgt.y,moved:0};
+  if(pointers.size===2){ const [a,b]=[...pointers.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y),s:tgt.s}; drag=null; }
+});
+cv.addEventListener('pointermove',e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch && pointers.size===2){ const [a,b]=[...pointers.values()]; tgt.s=clampS(pinch.s*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d); cam.s=tgt.s; return; }
+  if(drag){
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.moved=Math.max(drag.moved,Math.hypot(dx,dy));
+    if(drag.moved>4){ follow=null; tgt.x=drag.cx-dx/cam.s; tgt.y=drag.cy-dy/cam.s; cam.x=tgt.x; cam.y=tgt.y; }
+    return;
+  }
+  const b=pick(e.clientX,e.clientY); hover=b?b.id:null; cv.style.cursor=b?'pointer':'grab';
+  const tip=$('#tip'); if(b){ tip.textContent=b.name+' · '+b.kind; tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY+12)+'px'; tip.style.opacity=1;} else tip.style.opacity=0;
+});
+function endPtr(e){
+  pointers.delete(e.pointerId);
+  if(drag && drag.moved<=4 && pointers.size===0){ const b=pick(e.clientX,e.clientY); if(b) select(b.id); }
+  if(pointers.size<2) pinch=null;
+  if(pointers.size===0) drag=null;
+}
+cv.addEventListener('pointerup',endPtr); cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('pointerleave',()=>{$('#tip').style.opacity=0;hover=null;});
+const clampS = s=>Math.min(Math.max(s,overviewScale()*0.4),400);
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const before=s2w(e.clientX,e.clientY);
+  const ns=clampS(tgt.s*Math.exp(-e.deltaY*0.0015));
+  tgt.s=ns; cam.s=ns;
+  if(!follow){ const after=s2w(e.clientX,e.clientY); tgt.x+=before.x-after.x; tgt.y+=before.y-after.y; cam.x=tgt.x; cam.y=tgt.y; }
+},{passive:false});
+
+function select(id){
+  const b=BY[id]; selected=id; follow=id;
+  openPanel(b);
+  requestAnimationFrame(()=>{ tgt.s=focusScale(b); });
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.id===id||c.dataset.id===b.parent));
+  try{ history.replaceState(null,'','#'+id); }catch(e){}
+}
+function overview(){
+  selected=null; follow=null; closePanel(); tgt.x=0; tgt.y=0; tgt.s=overviewScale();
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+}
+
+/* ========== pannello ========== */
+const cache = {};
+let curTab='news', curBody=null, curQuery='';
+function openPanel(b){
+  curBody=b; curQuery='';
+  $('#pkicker').textContent=b.kind;
+  $('#ptitle').textContent=b.name;
+  $('#pdesc').textContent=b.d;
+  $('#pfacts').innerHTML=b.f.map(([k,v])=>`<div class="fact"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+  $('#pmoons').innerHTML = b.moons ? b.moons.map(m=>`<button data-id="${m.id}">☾ ${esc(m.name)}</button>`).join('') : '';
+  const par=$('#pparent'); if(b.parent){ par.textContent='← Torna a '+BY[b.parent].name; par.onclick=()=>select(b.parent); par.style.display='inline-block'; } else par.style.display='none';
+  $('#sinput').value=''; $('#sinput').placeholder=`Affina la ricerca (in inglese), es. "${b.q}"`;
+  $('#panel').classList.add('open'); document.body.classList.add('panel-open');
+  loadTab(curTab,true);
+}
+function closePanel(){ $('#panel').classList.remove('open'); document.body.classList.remove('panel-open'); }
+$('#pmoons').addEventListener('click',e=>{ const id=e.target.closest('button')?.dataset.id; if(id) select(id); });
+$('#pclose').onclick=overview;
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{ document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t)); curTab=t.dataset.tab; loadTab(curTab,true); });
+$('#sform').addEventListener('submit',e=>{ e.preventDefault(); curQuery=$('#sinput').value.trim(); loadTab(curTab,true); });
+$('#recent').onchange=()=>loadTab(curTab,true);
+
+function key(){ return [curBody.id,curTab,curQuery,$('#recent').checked].join('|'); }
+
+async function loadTab(tab,reset){
+  const body=$('#pbody'); const k=key();
+  if(reset){
+    if(cache[k]){ render(tab,cache[k],true); return; }
+    body.innerHTML='<div class="spin"></div>';
+  }
+  const st = cache[k] || (cache[k]={items:[],page:0,done:false});
+  try{
+    const page = st.page+1;
+    let items=[];
+    if(tab==='news') items = await fetchNews(curQuery||curBody.n, page);
+    else items = await fetchNasa(curQuery||curBody.q, tab==='photos'?'image':'video', page);
+    if(key()!==k) return; // l'utente ha cambiato corpo/tab nel frattempo
+    st.page=page; st.items.push(...items); if(items.length<12) st.done=true;
+    render(tab,st,reset);
+  }catch(err){
+    if(key()!==k) return;
+    body.innerHTML=`<div class="err">Impossibile caricare i contenuti (${esc(err.message)}).<br>Controlla la connessione o riprova tra poco.</div>`;
+    delete cache[k];
+  }
+}
+function render(tab,st,reset){
+  const body=$('#pbody');
+  if(!st.items.length){ body.innerHTML='<div class="state">Nessun risultato. Prova ad affinare la ricerca qui sopra.</div>'; return; }
+  let html='';
+  if(tab==='news'){
+    html = st.items.map(a=>`<a class="news" href="${esc(a.url)}" target="_blank" rel="noopener">
+      <img src="${esc(a.image_url||'')}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <div><h4>${esc(a.title)}</h4><small>${esc(a.news_site)} · ${fmtDate(a.published_at)}</small><p>${esc(a.summary)}</p></div></a>`).join('');
+    html += `<div class="src">Fonte: Spaceflight News API (articoli in lingua originale)</div>`;
+  } else if(tab==='photos'){
+    html = `<div class="grid">${st.items.map((it,i)=>`<div class="thumb" data-i="${i}"><img src="${esc(it.thumb)}" alt="${esc(it.title)}" loading="lazy" onerror="this.parentNode.style.display='none'"></div>`).join('')}</div>`;
+    html += `<div class="src">Fonte: NASA Image and Video Library</div>`;
+  } else {
+    html = `<div class="vgrid">${st.items.map((it,i)=>`<div class="vcard" data-i="${i}"><div class="thumb"><img src="${esc(it.thumb)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></div><h5>${esc(it.title)}</h5></div>`).join('')}</div>`;
+    html += `<div class="src">Fonte: NASA Image and Video Library</div>`;
+  }
+  if(!st.done) html += `<button class="btn more" id="more">Carica altri</button>`;
+  const top = body.scrollTop;
+  body.innerHTML=html;
+  if(!reset) body.scrollTop=top; else body.scrollTop=0;
+  $('#more')?.addEventListener('click',e=>{ e.target.textContent='Caricamento…'; e.target.disabled=true; loadTab(tab,false); });
+  body.querySelectorAll('.thumb[data-i]').forEach(el=>el.onclick=()=>openPhoto(st.items[+el.dataset.i]));
+  body.querySelectorAll('.vcard').forEach(el=>el.onclick=()=>openVideo(st.items[+el.dataset.i]));
+}
+
+/* ========== fonti dati ========== */
+async function getJSON(url){
+  const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+}
+async function fetchNews(q,page){
+  const lim=15, off=(page-1)*lim;
+  const j = await getJSON(`https://api.spaceflightnewsapi.net/v4/articles/?search=${encodeURIComponent(q)}&limit=${lim}&offset=${off}&ordering=-published_at`);
+  return (j.results||[]);
+}
+async function fetchNasa(q,type,page){
+  let url=`https://images-api.nasa.gov/search?q=${encodeURIComponent(q)}&media_type=${type}&page=${page}&page_size=24`;
+  if($('#recent').checked) url+=`&year_start=2020`;
+  const j = await getJSON(url);
+  return (j.collection?.items||[]).map(it=>{
+    const d=it.data?.[0]||{}; const l=(it.links||[]).find(x=>x.render==='image')||(it.links||[])[0]||{};
+    return {id:d.nasa_id,title:d.title,desc:stripHtml(d.description),date:d.date_created,center:d.center,thumb:(l.href||'').replace(/^http:/,'https:')};
+  }).filter(x=>x.thumb);
+}
+
+/* ========== lightbox ========== */
+function openLB(mediaHtml,it){
+  $('#lbmedia').innerHTML=mediaHtml;
+  $('#lbcap').innerHTML = `<h3>${esc(it.title)}</h3><small>${fmtDate(it.date)}${it.center?' · '+esc(it.center):''}${it.id?` · <a href="https://images.nasa.gov/details/${encodeURIComponent(it.id)}" target="_blank" rel="noopener">vedi su NASA</a>`:''}</small><p>${esc(it.desc||'')}</p>`;
+  $('#lb').classList.add('open');
+}
+function closeLB(){ $('#lb').classList.remove('open'); $('#lbmedia').innerHTML=''; }
+$('#lbx').onclick=closeLB;
+$('#lb').addEventListener('click',e=>{ if(e.target.id==='lb') closeLB(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if($('#lb').classList.contains('open')) closeLB(); else if($('#live').classList.contains('open')) closeLive(); else if(selected) overview(); }});
+function openPhoto(it){
+  const med = it.thumb.replace('~thumb','~medium'), orig=it.thumb.replace('~thumb','~orig');
+  openLB(`<img src="${esc(med)}" alt="${esc(it.title)}" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${esc(orig)}'}else{this.src='${esc(it.thumb)}'}">`,it);
+}
+async function openVideo(it){
+  openLB('<div class="spin"></div>',it);
+  try{
+    const j=await getJSON(`https://images-api.nasa.gov/asset/${encodeURIComponent(it.id)}`);
+    const hrefs=(j.collection?.items||[]).map(x=>x.href);
+    const v = hrefs.find(h=>/~mobile\.mp4$/i.test(h))||hrefs.find(h=>/~medium\.mp4$/i.test(h))||hrefs.find(h=>/~small\.mp4$/i.test(h))||hrefs.find(h=>/~orig\.mp4$/i.test(h))||hrefs.find(h=>/\.(mp4|mov)$/i.test(h));
+    if(!v) throw new Error('nessun file video');
+    const src=encodeURI(decodeURI(v.replace(/^http:/,'https:')));
+    $('#lbmedia').innerHTML=`<video src="${esc(src)}" controls autoplay playsinline poster="${esc(it.thumb)}"></video>`;
+  }catch(e){ $('#lbmedia').innerHTML=`<div class="err">Video non disponibile (${esc(e.message)}).</div>`; }
+}
+
+/* ========== chips ========== */
+$('#chips').innerHTML = BODIES.filter(b=>!b.parent).map(b=>`<button class="chip" data-id="${b.id}"><i style="background:${b.c[1]}"></i>${b.name}</button>`).join('');
+$('#chips').addEventListener('click',e=>{ const id=e.target.closest('.chip')?.dataset.id; if(id) select(id); });
+$('#speed').onchange=e=>speed=+e.target.value;
+$('#today').onclick=()=>{ simDays=nowDays(); };
+$('#overview').onclick=overview;
+
+/* =========================================================
+   LIVE DALLO SPAZIO
+   ========================================================= */
+let liveTimers=[], liveBuilt=false;
+function openLive(){ $('#live').classList.add('open'); if(!liveBuilt){ buildLive(); liveBuilt=true; } startLive(); }
+function closeLive(){ $('#live').classList.remove('open'); liveTimers.forEach(clearInterval); liveTimers=[]; }
+$('#openLive').onclick=openLive; $('#closeLive').onclick=closeLive;
+
+const bust = u => u+(u.includes('?')?'&':'?')+'t='+Math.floor(Date.now()/60000);
+const SDO = [['171 Å · corona','0171'],['304 Å · cromosfera','0304'],['193 Å · corona calda','0193'],['Visibile','HMIIC']];
+const sdoURL = c=>`https://sdo.gsfc.nasa.gov/assets/img/latest/latest_1024_${c}.jpg`;
+const GOES = [['GOES-19 · Americhe/Atlantico','https://cdn.star.nesdis.noaa.gov/GOES19/ABI/FD/GEOCOLOR/1808x1808.jpg'],['GOES-18 · Pacifico','https://cdn.star.nesdis.noaa.gov/GOES18/ABI/FD/GEOCOLOR/1808x1808.jpg']];
+const SOHO = [['LASCO C3','https://soho.nascom.nasa.gov/data/realtime/c3/1024/latest.jpg'],['LASCO C2','https://soho.nascom.nasa.gov/data/realtime/c2/1024/latest.jpg'],['EIT 304','https://soho.nascom.nasa.gov/data/realtime/eit_304/1024/latest.jpg']];
+
+function card(cls,title,sub,tag,body,foot){
+  return `<div class="card ${cls}"><div class="ch"><div><h3>${title}</h3><small>${sub}</small></div>${tag}</div>${body}${foot?`<div class="cf">${foot}</div>`:''}</div>`;
+}
+const LIVE=`<span class="tag">● Live</span>`, NEAR=`<span class="tag near">Quasi live</span>`;
+function seg(name,arr){ return `<div class="seg" data-seg="${name}">${arr.map((x,i)=>`<button class="${i?'':'on'}" data-i="${i}">${x[0]}</button>`).join('')}</div>`; }
+const imgFail = `onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'err',textContent:'Immagine non disponibile in questo momento.'}))"`;
+
+function buildLive(){
+  const fileProto = location.protocol==='file:';
+  $('#lgrid').innerHTML =
+    card('c8','NASA Live','Diretta ufficiale dal canale YouTube NASA: missioni, lanci, passeggiate spaziali',LIVE,
+      `<div class="yt"><iframe id="ytframe" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        <div class="note" id="ytnote">Per vedere le dirette YouTube dentro l'app, aprila tramite un piccolo server locale (vedi istruzioni nel file LEGGIMI).<br><a class="btn" href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">Apri le dirette NASA su YouTube ↗</a></div></div>`,
+      seg('yt',[['NASA','UCLA_DiR1FfKNvjuUpBHmylQ']]) + `<a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener">Tutte le dirette NASA ↗</a>`)
+  + card('c4','Dove si trova la ISS','Posizione in tempo reale della Stazione Spaziale',LIVE,
+      `<div class="cb" style="min-height:0;flex:none"><canvas id="issmap" style="width:100%;aspect-ratio:2/1;display:block"></canvas></div>
+       <div class="issstats"><div><b>Latitudine</b><span id="isslat">—</span></div><div><b>Longitudine</b><span id="isslon">—</span></div><div><b>Altitudine</b><span id="issalt">—</span></div><div><b>Velocità</b><span id="issvel">—</span></div></div>`,
+      `<span id="issvis">Aggiornamento ogni 5 s</span><a href="https://spotthestation.nasa.gov/" target="_blank" rel="noopener">Quando passa sopra di te ↗</a>`)
+  + card('c6','Il Sole adesso','Solar Dynamics Observatory (NASA) · ultime immagini',NEAR,
+      `<div class="cb"><img id="sdoimg" alt="Sole visto da SDO" src="${bust(sdoURL(SDO[0][1]))}" ${imgFail}></div>`, seg('sdo',SDO)+'<span>Aggiornata ogni ~15 min</span>')
+  + card('c6','La Terra adesso','Satelliti meteo geostazionari GOES (NOAA) · disco intero',NEAR,
+      `<div class="cb"><img id="goesimg" alt="Terra vista da GOES" src="${bust(GOES[0][1])}" ${imgFail}></div>`, seg('goes',GOES)+'<span>Aggiornata ogni 10 min</span>')
+  + card('c6','La Terra da 1,5 milioni di km','DSCOVR · camera EPIC, punto lagrangiano L1',NEAR,
+      `<div class="cb" id="epicbox"><div class="spin"></div></div>`, `<span id="epicinfo">—</span><button class="btn" id="epicplay" style="padding:4px 10px">▶ Rotazione</button>`)
+  + card('c6','Vento solare ed espulsioni','SOHO (ESA/NASA) · coronografi e ultravioletto',NEAR,
+      `<div class="cb"><img id="sohoimg" alt="SOHO" src="${bust(SOHO[0][1])}" ${imgFail}></div>`, seg('soho',SOHO)+'<span>Il disco bianco indica la posizione del Sole</span>')
+  + card('c12','Altre dirette e finestre sullo spazio','Si aprono in una nuova scheda','',
+      `<div class="links">
+        <a href="https://www.youtube.com/@NASA/streams" target="_blank" rel="noopener"><b>NASA · tutte le dirette</b><small>Lanci, ISS, conferenze stampa</small></a>
+        <a href="https://www.youtube.com/@SpaceX/streams" target="_blank" rel="noopener"><b>SpaceX</b><small>Lanci Falcon e Starship in diretta</small></a>
+        <a href="https://www.youtube.com/@EuropeanSpaceAgency/streams" target="_blank" rel="noopener"><b>ESA</b><small>Agenzia Spaziale Europea</small></a>
+        <a href="https://eyes.nasa.gov/apps/solar-system/" target="_blank" rel="noopener"><b>NASA Eyes on the Solar System</b><small>Tutte le sonde in tempo reale, in 3D</small></a>
+        <a href="https://sdo.gsfc.nasa.gov/data/" target="_blank" rel="noopener"><b>SDO · dati in tempo reale</b><small>Il Sole in tutte le lunghezze d'onda</small></a>
+        <a href="https://www.swpc.noaa.gov/" target="_blank" rel="noopener"><b>Meteo spaziale NOAA</b><small>Tempeste solari e aurore</small></a>
+        <a href="https://webbtelescope.org/news" target="_blank" rel="noopener"><b>James Webb</b><small>Ultime immagini del telescopio</small></a>
+        <a href="https://esahubble.org/images/potw/" target="_blank" rel="noopener"><b>Hubble · foto della settimana</b><small>ESA/Hubble</small></a>
+      </div>`,'');
+
+  // YouTube
+  const ytSet = ch=>{ $('#ytframe').src=`https://www.youtube.com/embed/live_stream?channel=${ch}&autoplay=1&mute=1`; };
+  if(fileProto){ $('#ytframe').style.display='none'; $('#ytnote').style.display='flex'; } else ytSet('UCLA_DiR1FfKNvjuUpBHmylQ');
+
+  // selettori
+  document.querySelectorAll('.seg').forEach(s=>s.addEventListener('click',e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    s.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); const i=+b.dataset.i, n=s.dataset.seg;
+    if(n==='sdo') swapImg('#sdoimg',sdoURL(SDO[i][1]));
+    if(n==='goes') swapImg('#goesimg',GOES[i][1]);
+    if(n==='soho') swapImg('#sohoimg',SOHO[i][1]);
+  }));
+  loadEPIC(); initISS();
+}
+function swapImg(sel,url){ const el=$(sel); if(el) el.src=bust(url); }
+function startLive(){
+  liveTimers.push(setInterval(updateISS,5000)); updateISS();
+  liveTimers.push(setInterval(()=>{
+    const on = n=>+document.querySelector(`.seg[data-seg="${n}"] .on`)?.dataset.i||0;
+    swapImg('#sdoimg',sdoURL(SDO[on('sdo')][1])); swapImg('#goesimg',GOES[on('goes')][1]); swapImg('#sohoimg',SOHO[on('soho')][1]);
+  },5*60000));
+}
+
+/* --- ISS --- */
+const issTrail=[]; let landRings=null;
+async function initISS(){
+  drawISS();
+  // continenti vettoriali (Natural Earth 1:110M) da jsDelivr, decodificati da TopoJSON
+  const urls=['https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json','https://unpkg.com/world-atlas@2/land-110m.json'];
+  for(const u of urls){
+    try{ landRings=decodeLand(await getJSON(u)); break; }catch(e){}
+  }
+  drawISS();
+  addEventListener('resize',drawISS);
+}
+function decodeLand(topo){
+  const [sx,sy]=topo.transform.scale, [tx,ty]=topo.transform.translate;
+  const arcs=topo.arcs.map(a=>{ let x=0,y=0; return a.map(([dx,dy])=>{x+=dx;y+=dy;return [x*sx+tx,y*sy+ty];}); });
+  const arc=i=> i<0 ? arcs[~i].slice().reverse() : arcs[i];
+  const rings=[];
+  const addPoly=poly=>poly.forEach(r=>{
+    let pts=[]; r.forEach((ai,k)=>{ const a=arc(ai); pts=pts.concat(k?a.slice(1):a); });
+    // rende continue le longitudini dei poligoni che attraversano l'antimeridiano
+    for(let i=1;i<pts.length;i++){ let lo=pts[i][0]; while(lo-pts[i-1][0]>180) lo-=360; while(lo-pts[i-1][0]<-180) lo+=360; pts[i]=[lo,pts[i][1]]; }
+    rings.push(pts);
+  });
+  const walk=g=>{ if(g.type==='GeometryCollection') g.geometries.forEach(walk); else if(g.type==='Polygon') addPoly(g.arcs); else if(g.type==='MultiPolygon') g.arcs.forEach(addPoly); };
+  walk(topo.objects.land);
+  return rings;
+}
+function subsolar(){
+  const d=(Date.now()-J2000)/864e5, rad=Math.PI/180;
+  const g=(357.529+0.98560028*d)*rad, q=280.459+0.98564736*d;
+  const L=(q+1.915*Math.sin(g)+0.020*Math.sin(2*g))*rad, e=(23.439-0.00000036*d)*rad;
+  const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L))/rad, dec=Math.asin(Math.sin(e)*Math.sin(L))/rad;
+  const gmst=(18.697374558+24.06570982441908*d)%24*15;
+  return {lon:((ra-gmst)%360+540)%360-180, lat:dec};
+}
+async function updateISS(){
+  try{
+    const j=await getJSON('https://api.wheretheiss.at/v1/satellites/25544');
+    issTrail.push([j.longitude,j.latitude]); if(issTrail.length>400) issTrail.shift();
+    $('#isslat').textContent=j.latitude.toFixed(2)+'°'; $('#isslon').textContent=j.longitude.toFixed(2)+'°';
+    $('#issalt').textContent=Math.round(j.altitude)+' km'; $('#issvel').textContent=Math.round(j.velocity).toLocaleString('it-IT')+' km/h';
+    $('#issvis').textContent = j.visibility==='daylight'?'☀ La ISS è alla luce del Sole':'🌙 La ISS è nell\'ombra della Terra';
+    drawISS();
+  }catch(e){ $('#issvis').textContent='Posizione non disponibile al momento'; }
+}
+function drawISS(){
+  const c=$('#issmap'); if(!c) return; const w=c.clientWidth||400, h=w/2, d=Math.min(devicePixelRatio||1,2);
+  c.width=w*d; c.height=h*d; const g=c.getContext('2d'); g.setTransform(d,0,0,d,0,0);
+  const P=([lo,la])=>[(lo+180)/360*w,(90-la)/180*h];
+  // oceano
+  const sea=g.createLinearGradient(0,0,0,h); sea.addColorStop(0,'#0d2747'); sea.addColorStop(.5,'#123a66'); sea.addColorStop(1,'#0d2747');
+  g.fillStyle=sea; g.fillRect(0,0,w,h);
+  // continenti
+  if(landRings){
+    g.beginPath();
+    for(const off of [-360,0,360]) landRings.forEach(r=>r.forEach((pt,i)=>{ const [x,y]=P([pt[0]+off,pt[1]]); i?g.lineTo(x,y):g.moveTo(x,y); }));
+    g.fillStyle='#3d6b4f'; g.fill('evenodd');
+    g.strokeStyle='rgba(190,230,200,.35)'; g.lineWidth=.6; g.stroke();
+  } else {
+    g.fillStyle='rgba(255,255,255,.5)'; g.font='12px Inter,sans-serif'; g.textAlign='center'; g.fillText('Caricamento mappa…',w/2,h/2);
+  }
+  // reticolo
+  g.strokeStyle='rgba(255,255,255,.08)'; g.lineWidth=1;
+  for(let x=0;x<=360;x+=30){ g.beginPath(); g.moveTo(x/360*w,0); g.lineTo(x/360*w,h); g.stroke(); }
+  for(let y=0;y<=180;y+=30){ g.beginPath(); g.moveTo(0,y/180*h); g.lineTo(w,y/180*h); g.stroke(); }
+  g.strokeStyle='rgba(255,255,255,.18)'; g.beginPath(); g.moveTo(0,h/2); g.lineTo(w,h/2); g.stroke();
+  // ombra della notte (terminatore)
+  const sun=subsolar(), r=Math.PI/180, dec=Math.abs(sun.lat)<0.1?0.1:sun.lat;
+  g.beginPath();
+  for(let lo=-180;lo<=180;lo+=2){ const la=Math.atan(-Math.cos((lo-sun.lon)*r)/Math.tan(dec*r))/r; const [x,y]=P([lo,la]); lo===-180?g.moveTo(x,y):g.lineTo(x,y); }
+  const pole = dec>0 ? h : 0; g.lineTo(w,pole); g.lineTo(0,pole); g.closePath();
+  g.fillStyle='rgba(2,4,14,.55)'; g.fill();
+  const [sx,sy]=P([sun.lon,sun.lat]); g.fillStyle='rgba(255,210,90,.9)'; g.beginPath(); g.arc(sx,sy,4,0,7); g.fill();
+  g.strokeStyle='rgba(255,181,71,.85)'; g.lineWidth=2; g.beginPath();
+  issTrail.forEach((pt,i)=>{ const [x,y]=P(pt); if(i===0||Math.abs(pt[0]-issTrail[i-1][0])>180) g.moveTo(x,y); else g.lineTo(x,y); }); g.stroke();
+  const last=issTrail[issTrail.length-1]; if(last){ const [x,y]=P(last);
+    g.fillStyle='rgba(255,59,78,.3)'; g.beginPath(); g.arc(x,y,12,0,7); g.fill();
+    g.fillStyle='#ff3b4e'; g.beginPath(); g.arc(x,y,5,0,7); g.fill(); g.strokeStyle='#fff'; g.lineWidth=1.5; g.stroke(); }
+}
+
+/* --- EPIC --- */
+let epicImgs=[], epicIdx=0, epicTimer=null;
+async function loadEPIC(){
+  try{
+    const j=await getJSON('https://epic.gsfc.nasa.gov/api/natural');
+    if(!j.length) throw new Error('nessuna immagine');
+    epicImgs=j.map(x=>{ const [dd]=x.date.split(' '); const [y,m,d]=dd.split('-'); return {src:`https://epic.gsfc.nasa.gov/archive/natural/${y}/${m}/${d}/jpg/${x.image}.jpg`,date:x.date}; });
+    epicIdx=epicImgs.length-1; showEPIC();
+    $('#epicplay').onclick=()=>{ if(epicTimer){clearInterval(epicTimer);epicTimer=null;$('#epicplay').textContent='▶ Rotazione';} else { epicTimer=setInterval(()=>{epicIdx=(epicIdx+1)%epicImgs.length;showEPIC();},900); $('#epicplay').textContent='❚❚ Pausa'; } };
+  }catch(e){ $('#epicbox').innerHTML=`<div class="err">Immagini EPIC non disponibili (${esc(e.message)}).</div>`; }
+}
+function showEPIC(){
+  const it=epicImgs[epicIdx]; let img=$('#epicbox img');
+  if(!img){ $('#epicbox').innerHTML=''; img=document.createElement('img'); img.alt='La Terra vista da DSCOVR'; $('#epicbox').appendChild(img); }
+  img.src=it.src; $('#epicinfo').textContent=`Scattata il ${new Date(it.date.replace(' ','T')+'Z').toLocaleString('it-IT',{dateStyle:'medium',timeStyle:'short'})} · ${epicIdx+1}/${epicImgs.length}`;
+}
+
+/* ========== avvio ========== */
+resize();
+addEventListener('resize',()=>{ resize(); if(selected) tgt.s=focusScale(BY[selected]); });
+cam.s=tgt.s=overviewScale()*0.55;
+requestAnimationFrame(()=>{ tgt.s=overviewScale(); });
+requestAnimationFrame(frame);
+const h=location.hash.slice(1);
+if(h==='live') openLive(); else if(BY[h]) setTimeout(()=>select(h),400);
+</script>
+</body>
+</html>
