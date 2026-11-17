@@ -388,7 +388,7 @@ function pos(b){
   if(b.parent){
     const p = pos(BY[b.parent]);
     const pr = BY[b.parent].r;
-    const th = 2*Math.PI*(ORB[b.id] ?? ((b.a*37%6.28)/(2*Math.PI) + simDays/b.P));
+    const th = (moonTrueDeg(b.id,simDays) + (OFF[b.id]||0))*DEG;
     const R = pr*b.a;
     return {x:p.x+R*Math.cos(th), y:p.y-R*Math.sin(th)};
   }
@@ -587,8 +587,7 @@ const fmtDur = s => s>=3600 ? Math.floor(s/3600)+' h '+Math.round(s%3600/60)+' m
 
 /* ---- posizione sul globo disegnato (per rover e satelliti) ---- */
 function sphereProject(host,lat,lon,f){
-  const [tz,inc]=tiltOf(host), ct=Math.cos(tz), st=Math.sin(tz), ci=Math.cos(inc), si=Math.sin(inc);
-  const E=[ct,st,0], N=[ci*st,-ci*ct,si], Z=[N[1]*E[2]-N[2]*E[1], N[2]*E[0]-N[0]*E[2], N[0]*E[1]-N[1]*E[0]];
+  const {E,N,Z}=basisOf(host);
   const lv=((lon+180)/360 + (ROT[host.id]||0) - .5)*2*Math.PI, la=lat*DEG;
   const bx=Math.cos(la)*Math.sin(lv), by=Math.sin(la), bz=Math.cos(la)*Math.cos(lv);
   return {x:(bx*E[0]+by*N[0]+bz*Z[0])*f, y:(bx*E[1]+by*N[1]+bz*Z[1])*f, z:bx*E[2]+by*N[2]+bz*Z[2]};
@@ -740,6 +739,66 @@ function renderDSNCard(){
   box.querySelectorAll('.dsnrow[data-id]').forEach(r=>r.onclick=()=>{ closeLive(); select(r.dataset.id); });
 }
 
+
+
+/* ---- orientamento dei globi: base (E=est, N=asse nord, Z=verso chi guarda) ---- */
+const BASIS={};
+function mkBasis(N,key){ const nl=Math.hypot(N[0],N[1],N[2]); N=[N[0]/nl,N[1]/nl,N[2]/nl];
+  let E=[-N[1],N[0],0]; const el=Math.hypot(E[0],E[1])||1; E=[E[0]/el,E[1]/el,0];
+  const Z=[N[1]*E[2]-N[2]*E[1], N[2]*E[0]-N[0]*E[2], N[0]*E[1]-N[1]*E[0]]; return {E,N,Z,key}; }
+function staticBasis(b){ const [tz,inc]=tiltOf(b), ct=Math.cos(tz), st=Math.sin(tz), ci=Math.cos(inc), si=Math.sin(inc); return mkBasis([ci*st,-ci*ct,si],'s'+tz+'|'+inc); }
+function dynBasis(theta,delta,inc){ // asse perpendicolare alla direzione theta (sullo schermo), inclinato di delta verso di essa
+  const tq=Math.round(theta/DEG)*DEG, dq=Math.round(delta/DEG*2)/2*DEG;
+  let nx=Math.sin(tq), ny=-Math.cos(tq); if(ny>0){ nx=-nx; ny=-ny; }
+  const N0=[Math.cos(dq)*nx+Math.sin(dq)*Math.cos(tq), Math.cos(dq)*ny+Math.sin(dq)*Math.sin(tq), 0];
+  return mkBasis([N0[0]*Math.cos(inc), N0[1]*Math.cos(inc), Math.sin(inc)], 'd'+tq.toFixed(4)+'|'+dq.toFixed(4)+'|'+inc);
+}
+const basisOf = b => BASIS[b.id] || (BASIS['s_'+b.id] ||= staticBasis(b));
+function subsolarLat(id,d){
+  if(id==='earth'){ const g=(357.529+0.98560028*d)*DEG, q=280.459+0.98564736*d, L=(q+1.915*Math.sin(g)+0.020*Math.sin(2*g))*DEG, e=(23.439-0.00000036*d)*DEG; return Math.asin(Math.sin(e)*Math.sin(L)); }
+  if(id==='mars'){ const {ls}=marsSun(d); return Math.asin(0.42565*Math.sin(ls))+0.25*DEG*Math.sin(ls); }
+  return 0;
+}
+function marsSun(d){ // Allison & McEwen (2000): longitudine solare ed equazione del tempo su Marte
+  const M=(19.3871+0.52402073*d)*DEG, a=270.3871+0.524038496*d;
+  const eq=(10.691+3e-7*d)*Math.sin(M)+0.623*Math.sin(2*M)+0.050*Math.sin(3*M)+0.005*Math.sin(4*M);
+  const ls=(a+eq)*DEG; return {ls, eot:2.861*Math.sin(2*ls)-0.071*Math.sin(4*ls)+0.002*Math.sin(6*ls)-eq};
+}
+
+/* ---- posizioni reali delle lune ----
+   Luna: formula di Meeus (precisione ~0,5°). Altre lune: angolo eclittico misurato da NASA/JPL Horizons
+   il 17/11/2026 00:00 TDB e moto medio siderale (°/giorno). */
+const MOON_EPOCH=9816.5;
+const MOON_EPH={phobos:[46.295,1128.8445850],deimos:[-125.585,285.1618970],io:[-72.858,203.4889538],europa:[-41.794,101.3747235],
+  ganymede:[-117.511,50.3176081],callisto:[152.125,21.5710715],mimas:[-22.706,381.994497],enceladus:[16.160,262.7318996],
+  dione:[-163.596,131.5349316],rhea:[178.009,79.6900478],titan:[3.185,22.5769768],iapetus:[127.659,4.5379572],
+  miranda:[-179.837,254.6906892],ariel:[-6.792,142.8356681],umbriel:[-8.690,86.8688923],titania:[-0.356,41.3514316],
+  oberon:[162.093,26.7394932],triton:[21.247,-61.2572637],charon:[-75.365,56.3625225]};
+function moonTrueDeg(id,d){
+  if(id==='moon'){ const L=218.316+13.176396*d, M=134.963+13.064993*d, F=93.272+13.229350*d, Dd=297.850+12.190749*d, Ms=357.529+0.98560028*d;
+    return L+6.289*Math.sin(M*DEG)+1.274*Math.sin((2*Dd-M)*DEG)+0.658*Math.sin(2*Dd*DEG)+0.214*Math.sin(2*M*DEG)-0.186*Math.sin(Ms*DEG)-0.114*Math.sin(2*F*DEG); }
+  const e=MOON_EPH[id]; return e ? e[0]+e[1]*(d-MOON_EPOCH) : 0;
+}
+const moonRate = id => id==='moon' ? 13.176396 : (MOON_EPH[id]?.[1] || 0); // °/giorno
+const OFF={}; // scarto (gradi o giri) introdotto per rallentare il moto quando la simulazione è veloce
+function resetOffsets(){ for(const k in OFF) OFF[k]=0; }
+/* ---- orientamento reale di Terra e Marte: il punto con il Sole allo zenit guarda il Sole ---- */
+function subsolarLon(id,d){
+  if(id==='earth'){
+    const g=(357.529+0.98560028*d)*DEG, q=280.459+0.98564736*d, L=(q+1.915*Math.sin(g)+0.020*Math.sin(2*g))*DEG, e=(23.439-0.00000036*d)*DEG;
+    const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L))/DEG, gmst=((18.697374558+24.06570982441908*d)%24)*15;
+    return ((ra-gmst)%360+540)%360-180;
+  }
+  if(id==='mars'){ const msd=(d+2451545+69.184/86400-2405522.0028779)/1.0274912517, mtc=((24*msd)%24+24)%24; return ((180-mtc*15-marsSun(d).eot)%360+540)%360-180; }
+  return 0;
+}
+function facingRot(b,v,lon){ // rotazione della mappa perché la longitudine "lon" guardi nella direzione v (coordinate schermo)
+  const {E,Z}=basisOf(b);
+  const bx=v[0]*E[0]+v[1]*E[1]+v[2]*E[2], bz=v[0]*Z[0]+v[1]*Z[1]+v[2]*Z[2];
+  let r=Math.atan2(bx,bz)/(2*Math.PI)+.5-(lon+180)/360; return r-Math.floor(r);
+}
+const SOLAR_DAY={earth:1,mars:1.0274912517};
+
 /* ========== disegno ========== */
 /* =========================================================
    RENDERING REALISTICO: mappe di superficie su sfere illuminate dal Sole
@@ -777,24 +836,31 @@ function tiltOf(b){ return TILT[b.id] || (b.parent && TILT[b.parent]) || [0,0]; 
 function spinOf(b){ return SPIN[b.id] ?? (b.P||27); } // le lune mostrano sempre la stessa faccia: ruotano col periodo orbitale
 function updateSpins(dt){
   for(const b of BODIES){
+    if(b.parent || SOLAR_DAY[b.id]) continue;
     const P=spinOf(b), rate=Math.sign(P)*Math.min(speed/Math.abs(P), 0.05); // giri al secondo, limitati per leggibilità
     ROT[b.id]=((ROT[b.id]??Math.random())+rate*dt)%1;
   }
   ROT.clouds=((ROT.clouds||0)+Math.min(speed/0.9,0.055)*dt)%1;
-  // lune: periodi reali; se la simulazione è veloce, tutto il sistema rallenta insieme (la luna più veloce fa al massimo un giro ogni 25 s)
+  // lune: posizione reale; se la simulazione è veloce, il sistema rallenta in proporzione (la luna più veloce: al massimo un giro ogni 25 s)
+  const relax=Math.exp(-dt*2.5);
   for(const host of BODIES){ if(!host.moons) continue;
-    const pmin=Math.min(...host.moons.map(m=>Math.abs(m.P))), f=Math.min(1, 0.04*pmin/Math.max(speed,1e-9));
-    for(const m of host.moons){ const o=ORB[m.id] ?? ((m.a*37%6.28)/(2*Math.PI) + simDays/m.P); ORB[m.id]=(o + speed*f/m.P*dt)%1; } }
+    const nmax=Math.max(...host.moons.map(m=>Math.abs(moonRate(m.id)))), f=Math.min(1, 0.04*360/(nmax*Math.max(speed,1e-9)));
+    for(const m of host.moons){
+      let o=OFF[m.id]||0;
+      if(f<1) o+=(f-1)*moonRate(m.id)*speed*dt; else { o=((o%360)+540)%360-180; o*=relax; }
+      OFF[m.id]=o;
+    } }
+  // rotazione di Terra e Marte: orientamento reale; oltre ~1 giro ogni 20 s viene rallentata
+  for(const id in SOLAR_DAY){ const tr=speed/SOLAR_DAY[id], f=Math.min(1,0.05/Math.max(tr,1e-12)); let o=OFF['rot_'+id]||0;
+    if(f<1) o+=(f-1)*tr*dt; else { o=((o%1)+1.5)%1-.5; o*=relax; } OFF['rot_'+id]=o; }
   // sonde in orbita: periodi reali, al massimo un giro ogni 50 s
   for(const p of PROBES){ if(p.mode!=='orbit') continue; const o=ORB[p.id] ?? (p.naif%10)/10; ORB[p.id]=(o+Math.min(speed/p.per,0.02)*dt)%1; }
 }
-function getLUT(D,tz,inc){
-  const key=D+'|'+tz+'|'+inc; let L=LUTS.get(key); if(L) return L;
+function getLUT(D,B){
+  const key=D+'|'+B.key; let L=LUTS.get(key); if(L) return L;
   const R=D/2, max=D*D, pos=new Int32Array(max), u0=new Float32Array(max), vv=new Float32Array(max),
         nx=new Float32Array(max), ny=new Float32Array(max), nz=new Float32Array(max), al=new Float32Array(max);
-  const ct=Math.cos(tz), st=Math.sin(tz), ci=Math.cos(inc), si=Math.sin(inc);
-  const E=[ct,st,0], N=[ci*st, -ci*ct, si];               // est e nord del pianeta, in coordinate schermo
-  const Z=[N[1]*E[2]-N[2]*E[1], N[2]*E[0]-N[0]*E[2], N[0]*E[1]-N[1]*E[0]];
+  const {E,N,Z}=B;                                         // est, nord e verso-osservatore del globo, in coordinate schermo
   let k=0;
   for(let y=0;y<D;y++) for(let x=0;x<D;x++){
     const dx=(x+.5-R)/R, dy=(y+.5-R)/R, d2=dx*dx+dy*dy, dist=Math.sqrt(d2)*R;
@@ -805,12 +871,12 @@ function getLUT(D,tz,inc){
     nx[k]=dx; ny[k]=dy; nz[k]=z; al[k]=a; k++;
   }
   L={n:k,pos,u0,vv,nx,ny,nz,al};
-  LUTS.set(key,L); if(LUTS.size>40) LUTS.delete(LUTS.keys().next().value);
+  LUTS.set(key,L); if(LUTS.size>80) LUTS.delete(LUTS.keys().next().value);
   return L;
 }
 const quantD=D=> D<=28 ? D : Math.min(820, Math.round(28*Math.pow(1.06,Math.round(Math.log(D/28)/Math.log(1.06)))));
 function renderSphere(b,D,Lx,Ly,Lz){
-  const tex=TEX[b.id]; const [tz,inc]=tiltOf(b); const L=getLUT(D,tz,inc);
+  const tex=TEX[b.id]; const L=getLUT(D,basisOf(b));
   let S=SPHERES[b.id];
   if(!S||S.D!==D){ const c=document.createElement('canvas'); c.width=c.height=D; const g=c.getContext('2d'); S=SPHERES[b.id]={c,g,img:g.createImageData(D,D),D}; S.out=new Uint32Array(S.img.data.buffer); }
   const out=S.out; out.fill(0);
@@ -896,6 +962,13 @@ function drawBody(b,p,rad,t){
     ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(rad,1.2),0,7); ctx.fill(); return;
   }
   if(b.rings) drawRingsTex(p,rad,true,Lx,Ly);
+  if(SOLAR_DAY[b.id]){ // asse perpendicolare al Sole, inclinato secondo la stagione; mezzogiorno sul meridiano giusto
+    BASIS[b.id]=dynBasis(Math.atan2(Ly,Lx), subsolarLat(b.id,simDays), .18);
+    ROT[b.id]=facingRot(b,[lx,ly,lz],subsolarLon(b.id,simDays)) + (OFF['rot_'+b.id]||0);
+  } else if(b.parent){ // rotazione sincrona: la stessa faccia sempre rivolta al pianeta
+    const pw=pos(BY[b.parent]), pp=w2s(pw.x,pw.y); let vx=pp.x-p.x, vy=pp.y-p.y; const l=Math.hypot(vx,vy)||1;
+    BASIS[b.id]=dynBasis(Math.atan2(vy,vx),0,.12); ROT[b.id]=facingRot(b,[vx/l,vy/l,0],0);
+  }
   const D=quantD(D0);
   const img=renderSphere(b,D,lx,ly,lz);
   ctx.drawImage(img,p.x-rad,p.y-rad,rad*2,rad*2);
@@ -1209,7 +1282,7 @@ $('#chips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(
   if(sv!==null && [...sel.options].some(o=>o.value===sv)) sel.value=sv;
   speed=+sel.value;
   sel.onchange=e=>{ speed=+e.target.value; store.set('cosmo.speed',e.target.value); }; }
-$('#today').onclick=()=>{ simDays=nowDays(); };
+$('#today').onclick=()=>{ simDays=nowDays(); resetOffsets(); };
 $('#overview').onclick=overview;
 $('#credits').onclick=showCredits;
 
